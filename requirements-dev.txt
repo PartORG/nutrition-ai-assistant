@@ -1,15 +1,52 @@
-# Dev tools (pytest, ruff, coverage)
-jupyterlab==3.6.3
-matplotlib==3.7.1
-numpy==1.24.3
-pandas==2.0.1
-seaborn==0.11.2
-scikit-learn==1.2.2
-statsmodels==0.14.0
+# Dev tools
 pytest==7.4.0
 testbook==0.4.2
-mlflow==2.4.1
-parsenvy==3.0.2
 black==23.3.0
-protobuf==4.23.3
 nbdime==4.0.2
+
+# Jupyter
+jupyterlab==4.2.5
+traitlets==5.14.3
+
+# Data science
+numpy==1.26.4
+pandas==2.2.2
+seaborn==0.13.2
+scikit-learn==1.5.1
+statsmodels==0.14.2
+plotly==5.22.0
+
+# MLOps
+mlflow==2.14.1
+python-dotenv==1.0.1
+parsenvy==3.0.2
+
+# PyTorch (pinned for Windows DLL compatibility)
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
+
+# LangChain & RAG (0.3.x series for langchain-core compatibility)
+langchain==0.3.14
+langchain-core==0.3.29
+langchain-community==0.3.14
+langchain-text-splitters==0.3.4
+langchain-openai==0.2.14
+langchain-huggingface==0.1.2
+langchain-ollama==0.2.2
+langchain-groq==0.2.2
+langchainhub==0.1.21
+sentence-transformers==3.3.1
+faiss-cpu==1.9.0.post1
+rank_bm25==0.2.2
+pypdf==5.1.0
+unstructured==0.16.11
+openpyxl==3.1.5
+
+# Utilities
+aiofiles==22.1.0
+protobuf==4.25.3
+typing-extensions==4.12.2
+six==1.16.0
+jsonschema==4.23.0
+rpds-py==0.19.1

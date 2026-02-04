@@ -57,3 +57,5 @@ build/
 
 # Exclude data folder and its subfolders
 data/
+requirements-dev.txt
+vector_databases/
