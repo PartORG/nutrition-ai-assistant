@@ -143,17 +143,31 @@ class MedicalRAG:
     
     def _build_chain(self):
         """Build the RAG chain for extracting nutrition parameters."""
-        system_prompt = """You are a medical nutrition specialist. Extract nutrition parameters for the given medical condition(s).
+        system_prompt = """You are a medical nutrition specialist. Extract and structure nutrition parameters for the given medical condition(s).
 
 CONTEXT:
 {context}
 
-Based on the provided medical documents, extract and structure the following information:
-- Dietary goals and recommendations
-- Foods to increase
-- Foods to limit or avoid
-- Specific nutrition targets (sugar, sodium, fiber, protein, etc.)
-- Important dietary notes"""
+Based on the provided medical documents, extract and format the information exactly as follows:
+
+**Dietary goals and recommendations**
+[List the main dietary goals and recommendations]
+
+**Foods to increase**
+[List specific foods that should be increased]
+
+**Foods to limit or avoid**
+[List foods to limit or avoid]
+
+**Specific nutrition targets**
+- sugar: [high, medium or low]
+- sodium: [high, medium or low]
+- fiber: [high, medium or low]
+- protein: [high, medium or low]
+- saturated fat: [high, medium or low]
+
+**Important dietary notes**
+[Any additional important notes or considerations]"""
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -174,65 +188,30 @@ Based on the provided medical documents, extract and structure the following inf
         
         query = f"""What are the dietary restrictions and nutrition guidelines for patients with: {', '.join(conditions)}?
         
-Please provide:
-1. Specific nutrition limits (sugar, sodium, fiber, protein, calories, saturated fat)
+Please provide in the structured format:
+1. Dietary goals and recommendations
 2. Foods to increase
-3. Foods to limit
-4. Foods to completely avoid
+3. Foods to limit or avoid
+4. Specific nutrition targets (high, medium, low) with values for: sugar, sodium, fiber, protein, saturated fat
 5. Important dietary notes"""
         
-        try:
-            response = self.rag_chain.invoke({"input": query})
-            return self._get_condition_constraints(conditions)
-        except Exception as e:
-            print(f"Error getting constraints: {e}")
-            return self._get_condition_constraints(conditions)
-    
-    def _get_condition_constraints(self, conditions: List[str]) -> Dict[str, Any]:
-        """Get constraint recommendations based on medical conditions."""
-        constraints = {
-            "constraints": {
-                "sugar_g": {"max": 25},
-                "sodium_mg": {"max": 2300},
-                "fiber_g": {"min": 5},
-                "saturated_fat_g": {"max": 20}
-            },
-            "increase": ["vegetables", "whole grains", "lean proteins"],
-            "limit": ["processed foods", "added sugars", "salt"],
-            "avoid": [],
-            "notes": []
-        }
-        
-        conditions_lower = [c.lower() for c in conditions]
-        
-        if any("diabetes" in c for c in conditions_lower):
-            constraints["constraints"]["sugar_g"]["max"] = 10
-            constraints["avoid"].append("refined sugars")
-            constraints["notes"].append("Monitor blood glucose levels")
-        
-        if any("hypertension" in c or "blood pressure" in c for c in conditions_lower):
-            constraints["constraints"]["sodium_mg"]["max"] = 1500
-            constraints["notes"].append("Limit sodium intake")
-        
-        if any("parkinson" in c for c in conditions_lower):
-            constraints["increase"].append("protein")
-            constraints["notes"].append("Consider protein timing with medications")
-        
-        return constraints
+        response = self.rag_chain.invoke({"input": query})
+        return response.get("answer", "")
     
     def _default_constraints(self) -> Dict[str, Any]:
-        """Return default healthy eating constraints."""
+        """Return default constraints when no conditions are provided."""
         return {
-            "constraints": {
-                "sugar_g": {"max": 25},
-                "sodium_mg": {"max": 2300},
-                "fiber_g": {"min": 5},
-                "saturated_fat_g": {"max": 20}
+            "dietary_goals": "General healthy eating guidelines",
+            "foods_to_increase": ["whole grains", "vegetables", "fruits", "lean proteins"],
+            "foods_to_avoid": [],
+            "nutrition_targets": {
+                "sugar": "low",
+                "sodium": "medium",
+                "fiber": "high",
+                "protein": "high",
+                "saturated_fat": "low"
             },
-            "increase": ["vegetables", "whole grains", "lean proteins"],
-            "limit": ["processed foods", "added sugars"],
-            "avoid": [],
-            "notes": ["General healthy eating guidelines"]
+            "notes": "No specific medical conditions provided"
         }
     
     def ask(self, query: str) -> str:
