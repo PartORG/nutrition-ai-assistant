@@ -1,0 +1,13 @@
+- SQLITE --> fast, light
+- model table User:
+-- id, name, surname, preferences, restrictions, health_condition, caretaker,...
+- pydantic dataclass or @dataclass -- one of these.
+- code: create database file, create table using that model User
+
+if __name__ == __main__:
+1) function to create database with table
+2) connect to this database
+3) retrieve or write data to databasse
+
+- look at how in python connect to sqlite database?
+- look at how in python retrieve the data from database? 
