@@ -11,9 +11,8 @@ from pathlib import Path
 # This file lives at src/pipeline/config.py → .parent.parent.parent = project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-DATA_DIR = PROJECT_ROOT / "data"
-RAW_DATA_DIR = DATA_DIR / "raw"
-PDF_DIR = DATA_DIR / "pdfs"
+DATA_DIR = PROJECT_ROOT / "src" / "data"
+PDF_DIR = DATA_DIR / "medical_pfds"
 PROCESSED_DIR = DATA_DIR / "processed"
 
 MEDICAL_VECTORSTORE_PATH = PROCESSED_DIR / "medical_pdfs_vectorstore"
