@@ -56,6 +56,6 @@ build/
 .ipynb_checkpoints/
 
 # Exclude data folder and its subfolders
-data/
+/data_test
 requirements-dev.txt
 vector_databases/
