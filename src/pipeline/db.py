@@ -1,0 +1,231 @@
+# db_setup/user_model.py
+
+import sqlite3
+from dataclasses import dataclass, asdict
+from datetime import datetime
+from typing import List
+
+DB_FILE = "users.db"
+
+
+#DATA MODELS
+
+@dataclass
+class User:
+    id: int
+    name: str
+    surname: str
+    preferences: str
+    restrictions: str
+    health_condition: str
+    caretaker: str
+    created_at: str
+    updated_at: str
+    deleted_at: str
+    age: int
+    gender: str  # "Female", "Male", or "Other"
+
+
+@dataclass
+class MedicalAdvice:
+    id: int
+    health_condition: str
+    medical_advice: str
+    user_id: int
+
+
+
+#DATABASE HANDLER
+
+class UserDBHandler:
+    def __init__(self, db_file: str = DB_FILE):
+        self.db_file = db_file
+
+    def connect(self):
+        return sqlite3.connect(self.db_file)
+
+    #USERS TABLE 
+
+    def create_users_table(self):
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                surname TEXT,
+                preferences TEXT,
+                restrictions TEXT,
+                health_condition TEXT,
+                caretaker TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                deleted_at TEXT,
+                age INTEGER,
+                gender TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def insert_user(self, user: User):
+        conn = self.connect()
+        cursor = conn.cursor()
+        user_dict = asdict(user)
+        columns = ", ".join(user_dict.keys())
+        placeholders = ", ".join(["?"] * len(user_dict))
+        # get the stored user id after insertion for future reference (e.g. linking medical advice)
+        cursor.execute(
+            f"INSERT INTO users ({columns}) VALUES ({placeholders})",
+            tuple(user_dict.values())
+        )
+        conn.commit()
+        conn.close()
+        # return stored user id
+
+    def read_users(self) -> List[tuple]:
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users")
+        users = cursor.fetchall()
+        conn.close()
+        return users
+    
+    # ADD HERE new function: read_user(self, username, usersurname)
+    # query select * from users where name== surname== last updated limit 1 
+    # fetchone()
+
+    def update_user(self, user_id: int, field: str, new_value):
+        allowed_fields = {
+            "name", "surname", "preferences", "restrictions",
+            "health_condition", "caretaker", "age", "gender"
+        }
+        if field not in allowed_fields:
+            raise ValueError("Invalid field name")
+
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE users SET {field} = ?, updated_at = ? WHERE id = ?",
+            (new_value, datetime.now().isoformat(), user_id)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_users_by_condition(self, condition: str) -> List[tuple]:
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM users WHERE health_condition = ?",
+            (condition,)
+        )
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def soft_delete_user(self, user_id: int):
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET deleted_at = ? WHERE id = ?",
+            (datetime.now().isoformat(), user_id)
+        )
+        conn.commit()
+        conn.close()
+
+    #MEDICAL ADVICE TABLE
+
+    def create_medical_advice_table(self):
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS medical_advice (
+                id INTEGER PRIMARY KEY,
+                health_condition TEXT,
+                medical_advice TEXT,
+                user_id INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def insert_medical_advice(self, advice: MedicalAdvice):
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO medical_advice (id, health_condition, medical_advice, user_id)
+            VALUES (?, ?, ?, ?)
+        """, (advice.id, advice.health_condition, advice.medical_advice, advice.user_id))
+        conn.commit()
+        conn.close()
+
+    def get_medical_advice_by_user(self, user_id: int) -> List[tuple]:
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM medical_advice WHERE user_id = ?",
+            (user_id,)
+        )
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+
+
+#MAIN: TEST EVERYTHING
+
+if __name__ == "__main__":
+    db = UserDBHandler()
+
+    #create tables
+    db.create_users_table()
+    db.create_medical_advice_table()
+
+    now = datetime.now().isoformat()
+
+    #insert test user
+    user = User(
+        id=1,
+        name="Adam",
+        surname="Levin",
+        preferences="Low Sugar",
+        restrictions="Rental",
+        health_condition="Kidney Disease",
+        caretaker="None",
+        created_at=now,
+        updated_at=now,
+        deleted_at="",
+        age=67,
+        gender="Other"
+    )
+
+    db.insert_user(user)
+
+    print("All users:")
+    print(db.read_users())
+
+    #Update user
+    db.update_user(1, "preferences", "Low Sugar")
+
+    print("\nUsers with Kidney Disease:")
+    print(db.get_users_by_condition("Kidney Disease"))
+
+    #Insert medical advice
+    advice = MedicalAdvice(
+        id=1,
+        health_condition="Kidney Disease",
+        medical_advice="Avoid high phosphorus and potassium foods.",
+        user_id=1
+    )
+
+    db.insert_medical_advice(advice)
+
+    print("\nMedical advice for user 1:")
+    print(db.get_medical_advice_by_user(1))
+
+    #Soft delete user
+    db.soft_delete_user(1)
+
+    print("\nAfter soft delete:")
+    print(db.read_users())
