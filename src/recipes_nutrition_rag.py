@@ -913,5 +913,5 @@ if __name__ == "__main__":
         log_level="INFO"
         )
     my_rag.initialize()
-    answer = my_rag.ask("I'm vegetarian and need a recipe")
+    answer = my_rag.ask("I'm vegetarian and need recommendations for my next meal")
     print(answer)
