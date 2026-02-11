@@ -63,27 +63,25 @@ class RAGPipeline:
         if existing:
             user_id = existing[0]
             print(f"[DB] Found existing user with ID: {user_id}")
-            user = existing  #it should be something like User (*existing) but we don't need it for now, just the ID
+            # user = existing  #it should be something like User (*existing) but we don't need it for now, just the ID
         else:
-            #user_id = uuid.uuid4().int >> 64
             user = User(
-                #id=user_id,
-                name=name,
-                surname=surname,
+                name=name.strip(),
+                surname=surname.strip(),
                 preferences="",
                 restrictions="",
-                health_condition=health_condition,
-                caretaker=caretaker,
+                health_condition=health_condition.strip(),
+                caretaker=caretaker.strip(),
                 created_at=now,
                 updated_at=now,
                 deleted_at="",
                 age=int(age),
                 gender=gender.strip().capitalize(),
             )
-            self.db_handler.insert_user(user)
-            print(f"[DB] Inserted new user with ID: {user.id}")
+            user_id = self.db_handler.insert_user(user)
+            print(f"[DB] Inserted new user with ID: {user_id}")
 
-        return user.id
+        return user_id
     
     def step_update_user(self, user_id: int, intent: UserIntent):
         self.db_handler.update_user(user_id, "preferences", ", ".join(intent.ingredients_list))
@@ -108,11 +106,10 @@ class RAGPipeline:
         
         constraints = self._step_get_constraints(intent)
 
-        advice_text = constraints.get("advice", "")
+        advice_text = constraints.get("notes", "")
         if advice_text:
             advice = MedicalAdvice(
-                id=uuid.uuid4().int >> 64,
-                health_condition=", ".join(intent.health_condition.split(",")),
+                health_condition=intent.health_condition or "",
                 medical_advice=advice_text,
                 user_id=user_id
             )
@@ -257,7 +254,3 @@ if __name__ == "__main__":
     query = "I have diabetes and high blood pressure. I want to eat something with pork belly, but I need to avoid too much sodium and sugar. What do you recommend for dinner?"
     result = pipeline.process(query)
     result.display()
-
-
-
-
