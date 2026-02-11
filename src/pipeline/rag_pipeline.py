@@ -1,9 +1,14 @@
 from typing import List, Dict, Any
 from dataclasses import dataclass, field
+import sys
+from pathlib import Path
 
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 from pipeline.config import (
-    PDF_DIR, RAW_DATA_DIR,
-    MEDICAL_VECTORSTORE_PATH, NUTRITION_VECTORSTORE_PATH,
+    PDF_DIR, DATA_DIR,
+    MEDICAL_VECTORSTORE_PATH, RECIPES_NUTRITION_VECTOR_PATH,
     LLM_MODEL,
 )
 from pipeline.intent_retriever import UserIntent, IntentParser
@@ -257,9 +262,9 @@ if __name__ == "__main__":
     # Initialize components
     intent_parser = IntentParser(model_name=LLM_MODEL)
     medical_rag = MedicalRAG(folder_paths=[str(PDF_DIR)], model_name=LLM_MODEL, vectorstore_path=str(MEDICAL_VECTORSTORE_PATH))
-    medical_rag.initialize(force_rebuild=True)  # TODO: set to False after first successful rebuild
+    medical_rag.initialize(force_rebuild=False)  # TODO: set to False after first successful rebuild
 
-    nutrition_rag = RecipesNutritionRAG(data_folder=str(RAW_DATA_DIR), model_name=LLM_MODEL, vectorstore_path=str(NUTRITION_VECTORSTORE_PATH))
+    nutrition_rag = RecipesNutritionRAG(data_folder=str(DATA_DIR), model_name=LLM_MODEL, vectorstore_path=str(RECIPES_NUTRITION_VECTOR_PATH))
     nutrition_rag.initialize()
 
     safety_filter = SafetyFilter(debug=True)
