@@ -4,6 +4,7 @@ import sqlite3
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import List
+from typing import Optional
 
 DB_FILE = "users.db"
 
@@ -12,7 +13,6 @@ DB_FILE = "users.db"
 
 @dataclass
 class User:
-    id: int
     name: str
     surname: str
     preferences: str
@@ -24,6 +24,7 @@ class User:
     deleted_at: str
     age: int
     gender: str  # "Female", "Male", or "Other"
+    id: Optional[int] = None
 
 
 @dataclass
@@ -46,12 +47,50 @@ class UserDBHandler:
 
     #USERS TABLE 
 
+    #def create_users_table(self):
+        # conn = self.connect()
+        # cursor = conn.cursor()
+        # cursor.execute("""
+        #     CREATE TABLE IF NOT EXISTS users (
+        #         id INTEGER PRIMARY KEY,
+        #         name TEXT,
+        #         surname TEXT,
+        #         preferences TEXT,
+        #         restrictions TEXT,
+        #         health_condition TEXT,
+        #         caretaker TEXT,
+        #         created_at TEXT,
+        #         updated_at TEXT,
+        #         deleted_at TEXT,
+        #         age INTEGER,
+        #         gender TEXT
+        #     )
+        # """)
+        # conn.commit()
+        # conn.close()
+
+    #def insert_user(self, user: User):
+        #conn = self.connect()
+        #cursor = conn.cursor()
+        #user_dict = asdict(user)
+        #columns = ", ".join(user_dict.keys())
+        #placeholders = ", ".join(["?"] * len(user_dict))
+        # get the stored user id after insertion for future reference (e.g. linking medical advice)
+        # print(f"[DB] Inserting user: {user_dict} {columns}")
+        # cursor.execute(
+        #     f"INSERT INTO users ({columns}) VALUES ({placeholders})",
+        #     tuple(user_dict.values())
+        # )
+        # conn.commit()
+        # conn.close()
+        # return stored user id
+
     def create_users_table(self):
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT,
                 surname TEXT,
                 preferences TEXT,
@@ -72,16 +111,19 @@ class UserDBHandler:
         conn = self.connect()
         cursor = conn.cursor()
         user_dict = asdict(user)
+        # remove id so SQLite can autoincrement it
+        user_dict.pop("id", None)
         columns = ", ".join(user_dict.keys())
         placeholders = ", ".join(["?"] * len(user_dict))
-        # get the stored user id after insertion for future reference (e.g. linking medical advice)
         cursor.execute(
             f"INSERT INTO users ({columns}) VALUES ({placeholders})",
             tuple(user_dict.values())
         )
         conn.commit()
+        # return the auto-generated user id
+        user_id = cursor.lastrowid
         conn.close()
-        # return stored user id
+        return user_id    
 
     def read_users(self) -> List[tuple]:
         conn = self.connect()
@@ -93,7 +135,18 @@ class UserDBHandler:
     
     # ADD HERE new function: read_user(self, username, usersurname)
     # query select * from users where name== surname== last updated limit 1 
-    # fetchone()
+    # fetchone() - DONE
+
+    def read_user(self, name: str, surname: str) -> tuple:
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM users WHERE name = ? AND surname = ? ORDER BY updated_at DESC LIMIT 1",
+            (name, surname)
+        )
+        user = cursor.fetchone()
+        conn.close()
+        return user
 
     def update_user(self, user_id: int, field: str, new_value):
         allowed_fields = {
