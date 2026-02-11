@@ -29,10 +29,10 @@ class User:
 
 @dataclass
 class MedicalAdvice:
-    id: int
     health_condition: str
     medical_advice: str
     user_id: int
+    id: Optional[int] = None
 
 
 
@@ -46,45 +46,6 @@ class UserDBHandler:
         return sqlite3.connect(self.db_file)
 
     #USERS TABLE 
-
-    #def create_users_table(self):
-        # conn = self.connect()
-        # cursor = conn.cursor()
-        # cursor.execute("""
-        #     CREATE TABLE IF NOT EXISTS users (
-        #         id INTEGER PRIMARY KEY,
-        #         name TEXT,
-        #         surname TEXT,
-        #         preferences TEXT,
-        #         restrictions TEXT,
-        #         health_condition TEXT,
-        #         caretaker TEXT,
-        #         created_at TEXT,
-        #         updated_at TEXT,
-        #         deleted_at TEXT,
-        #         age INTEGER,
-        #         gender TEXT
-        #     )
-        # """)
-        # conn.commit()
-        # conn.close()
-
-    #def insert_user(self, user: User):
-        #conn = self.connect()
-        #cursor = conn.cursor()
-        #user_dict = asdict(user)
-        #columns = ", ".join(user_dict.keys())
-        #placeholders = ", ".join(["?"] * len(user_dict))
-        # get the stored user id after insertion for future reference (e.g. linking medical advice)
-        # print(f"[DB] Inserting user: {user_dict} {columns}")
-        # cursor.execute(
-        #     f"INSERT INTO users ({columns}) VALUES ({placeholders})",
-        #     tuple(user_dict.values())
-        # )
-        # conn.commit()
-        # conn.close()
-        # return stored user id
-
     def create_users_table(self):
         conn = self.connect()
         cursor = conn.cursor()
@@ -123,7 +84,7 @@ class UserDBHandler:
         # return the auto-generated user id
         user_id = cursor.lastrowid
         conn.close()
-        return user_id    
+        return user_id  
 
     def read_users(self) -> List[tuple]:
         conn = self.connect()
@@ -137,16 +98,16 @@ class UserDBHandler:
     # query select * from users where name== surname== last updated limit 1 
     # fetchone() - DONE
 
-    def read_user(self, name: str, surname: str) -> tuple:
+    def read_user(self, name: str, surname: str):
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM users WHERE name = ? AND surname = ? ORDER BY updated_at DESC LIMIT 1",
             (name, surname)
         )
-        user = cursor.fetchone()
+        result = cursor.fetchone()
         conn.close()
-        return user
+        return result
 
     def update_user(self, user_id: int, field: str, new_value):
         allowed_fields = {
@@ -193,7 +154,7 @@ class UserDBHandler:
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS medical_advice (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 health_condition TEXT,
                 medical_advice TEXT,
                 user_id INTEGER,
@@ -207,11 +168,13 @@ class UserDBHandler:
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO medical_advice (id, health_condition, medical_advice, user_id)
-            VALUES (?, ?, ?, ?)
-        """, (advice.id, advice.health_condition, advice.medical_advice, advice.user_id))
+            INSERT INTO medical_advice (health_condition, medical_advice, user_id)
+            VALUES (?, ?, ?)
+        """, (advice.health_condition, advice.medical_advice, advice.user_id))
         conn.commit()
+        advice_id = cursor.lastrowid
         conn.close()
+        return advice_id
 
     def get_medical_advice_by_user(self, user_id: int) -> List[tuple]:
         conn = self.connect()
