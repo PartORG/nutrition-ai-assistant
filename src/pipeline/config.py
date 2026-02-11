@@ -16,7 +16,8 @@ PDF_DIR = DATA_DIR / "medical_pfds"
 PROCESSED_DIR = DATA_DIR / "processed"
 
 MEDICAL_VECTORSTORE_PATH = PROCESSED_DIR / "medical_pdfs_vectorstore"
-NUTRITION_VECTORSTORE_PATH = PROCESSED_DIR / "nutrition_vectorstore"
+# NUTRITION_VECTORSTORE_PATH = PROCESSED_DIR / "nutrition_vectorstore"
+RECIPES_NUTRITION_VECTOR_PATH = PROJECT_ROOT / "vector_databases"
 
 # ── LLM / Model ───────────────────────────────────────────────
 LLM_MODEL = "llama3.2"

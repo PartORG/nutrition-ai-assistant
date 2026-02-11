@@ -667,11 +667,11 @@ Cholesterol: {row['cholesterol']} | Saturated Fat: {row['saturated_fat']}
 
 
 if __name__ == "__main__":
-    from pipeline.config import RAW_DATA_DIR, NUTRITION_VECTORSTORE_PATH, LLM_MODEL
+    from pipeline.config import DATA_DIR, RECIPES_NUTRITION_VECTOR_PATH, LLM_MODEL
 
     my_rag = RecipesNutritionRAG(
-        data_folder=str(RAW_DATA_DIR),
-        vectorstore_path=str(NUTRITION_VECTORSTORE_PATH),
+        data_folder=str(DATA_DIR),
+        vectorstore_path=str(RECIPES_NUTRITION_VECTOR_PATH),
         model_name=LLM_MODEL,
         log_level="INFO",
     )
