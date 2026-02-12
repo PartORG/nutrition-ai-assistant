@@ -12,10 +12,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 DATA_DIR = PROJECT_ROOT / "src" / "data"
-PDF_DIR = DATA_DIR / "medical_pfds"
+PDF_DIR = PROJECT_ROOT / "data_test" / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 
-MEDICAL_VECTORSTORE_PATH = PROCESSED_DIR / "medical_pdfs_vectorstore"
+# MEDICAL_VECTORSTORE_PATH = PROCESSED_DIR / "medical_pdfs_vectorstore"
+MEDICAL_VECTORSTORE_PATH = PROJECT_ROOT / "vector_databases" / "vector_db_medi"
 # NUTRITION_VECTORSTORE_PATH = PROCESSED_DIR / "nutrition_vectorstore"
 RECIPES_NUTRITION_VECTOR_PATH = PROJECT_ROOT / "vector_databases"
 

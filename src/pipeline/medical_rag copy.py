@@ -68,13 +68,11 @@ RULES:
         folder_paths: List[str],
         vectorstore_path: str,
         model_name: str = "llama3.2",
-        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
         temperature: float = 0.3,
         chunk_size: int = 300,
         chunk_overlap: int = 50,
     ):
         super().__init__(
-            embedding_model=embedding_model,
             vectorstore_path=vectorstore_path,
             model_name=model_name,
             temperature=temperature,
@@ -186,6 +184,34 @@ RULES:
             },
             "notes": "No specific medical conditions provided",
         }
+
+    def start_timer(self) -> None:
+        """Start timing a run."""
+        self._start_time = time.time()
+        logger.info("Timer started")
+
+    def end_timer(self) -> str:
+        """End timing and return elapsed time as a formatted string."""
+        if self._start_time is None:
+            logger.warning("Timer was not started")
+            return "Timer not started"
+        
+        elapsed = time.time() - self._start_time
+        
+        # Format time nicely
+        hours, remainder = divmod(elapsed, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        if hours > 0:
+            time_str = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
+        elif minutes > 0:
+            time_str = f"{int(minutes)}m {seconds:.2f}s"
+        else:
+            time_str = f"{seconds:.2f}s"
+        
+        logger.info(f"Elapsed time: {time_str}")
+        self._start_time = None
+        return f"✓ Run completed in {time_str}"
 
 
 if __name__ == "__main__":
