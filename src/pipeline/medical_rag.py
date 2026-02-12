@@ -10,12 +10,19 @@ Inherits from BaseRAG and adds:
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import List, Dict, Any
 
 from langchain.schema import Document
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+from pathlib import Path
+import sys
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 
 from pipeline.config import PDF_DIR, MEDICAL_VECTORSTORE_PATH, LLM_MODEL
 from pipeline.base_rag import BaseRAG
@@ -61,11 +68,13 @@ RULES:
         folder_paths: List[str],
         vectorstore_path: str,
         model_name: str = "llama3.2",
+        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
         temperature: float = 0.3,
         chunk_size: int = 300,
         chunk_overlap: int = 50,
     ):
         super().__init__(
+            embedding_model=embedding_model,
             vectorstore_path=vectorstore_path,
             model_name=model_name,
             temperature=temperature,
@@ -74,6 +83,7 @@ RULES:
         self.folder_paths = folder_paths if isinstance(folder_paths, list) else [folder_paths]
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self._start_time = None
 
     # ================================================================
     # BaseRAG abstract method implementations
@@ -95,7 +105,7 @@ RULES:
                 logger.warning(f"Folder {folder_path} does not exist — skipping")
                 continue
 
-            pdf_files = list(pdf_folder.glob("*.pdf"))
+            pdf_files = list(pdf_folder.rglob("*.pdf"))
             logger.info(f"Found {len(pdf_files)} PDFs in {folder_path}")
 
             for pdf_file in pdf_files:
@@ -184,6 +194,6 @@ if __name__ == "__main__":
         model_name=LLM_MODEL,
         vectorstore_path=str(MEDICAL_VECTORSTORE_PATH),
     )
-    medical_rag.initialize(force_rebuild=False)
+    medical_rag.initialize(force_rebuild=True)
     print("\nMedical RAG ready!")
     medical_rag.ask(query="hello")
