@@ -5,6 +5,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import OllamaLLM
 
+
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 from pipeline.config import LLM_MODEL
 
 @dataclass
@@ -17,12 +24,10 @@ class UserIntent:
     name: str = ""
     surname: str = ""
     preferences: str = ""       # ingredients, cooking style, cuisine
-    restrictions: str = ""      # dietary restrictions (keto, vegan, etc.)
-    health_condition: str = ""  # medical conditions (diabetes, hypertension, etc.)
+    restrictions: str = ""      # dietary restrictions (keto, vegan, etc.) and allergies
+    health_condition: str = ""  # medical conditions (diabetes, MS, kidney disease etc.)
     caretaker: str = ""
-    
-    # Parsed lists used internally by the pipeline (not stored in DB)
-    allergies: List[str] = field(default_factory=list)
+    instructions: str = ""      # specific request for this meal
     
     def __repr__(self):
         fields = {
@@ -32,7 +37,7 @@ class UserIntent:
             "restrictions": self.restrictions,
             "health_condition": self.health_condition,
             "caretaker": self.caretaker,
-            "allergies": self.allergies,
+            "instructions": self.instructions,
         }
         lines = [f"  {k}: {v}" for k, v in fields.items() if v]
         return "UserIntent:\n" + "\n".join(lines) if lines else "UserIntent: (empty)"
@@ -46,6 +51,11 @@ class UserIntent:
     def ingredients_list(self) -> List[str]:
         """Extract ingredient names from preferences string."""
         return [p.strip() for p in self.preferences.split(",") if p.strip()]
+    
+    @property
+    def restrictions_list(self) -> List[str]:
+        """Return restrictions as a list for pipeline processing."""
+        return [r.strip() for r in self.restrictions.split(",") if r.strip()]
 
 
 class IntentParser:
@@ -68,24 +78,27 @@ Do NOT add, guess, or infer anything that the user did not say.
 Return a JSON object with these keys:
 - "name" (string): user's first name, or "" if not stated
 - "surname" (string): user's last name, or "" if not stated
-- "preferences" (string): foods and cooking style the user wants, comma-separated, or "" if not stated
-- "restrictions" (string): dietary restrictions the user follows, comma-separated, or "" if not stated
-- "health_condition" (string): medical conditions the user has, comma-separated, or "" if not stated. Use snake_case. Normalize common phrases: "high blood pressure" -> "hypertension", "sugar problem" -> "diabetes"
+- "preferences" (string): ingredients the user really likes, cooking style, cuisine preferences, comma-separated, or "" if not stated
+- "restrictions" (string): dietary restrictions (vegetarian, vegan, keto, etc.) AND allergies/foods the user cannot eat, comma-separated, or "" if not stated
+- "health_condition" (string): medical conditions like kidney disease, MS, ALS, diabetes, hypertension, comma-separated, or "" if not stated. Use snake_case. Normalize: "high blood pressure" -> "hypertension", "sugar problem" -> "diabetes"
 - "caretaker" (string): caretaker name, or "" if not stated
-- "allergies" (array of strings): foods the user cannot eat or is allergic to, or [] if not stated
+- "instructions" (string): specific requests for THIS meal (e.g., "use these ingredients I have", "try Italian cuisine", "make it vegetarian this time"), or "" if not stated
 
 CRITICAL RULES:
 1. ONLY extract what the user explicitly says. Never fill in a field the user did not mention.
 2. If the user does not mention a field, return "" for strings or [] for arrays.
-3. Do not confuse allergies with preferences. "I can't eat X" = allergy. "I want X" = preference.
+3. "allergies" goes into "restrictions" field along with dietary restrictions.
+4. Do not confuse allergies with preferences. "I can't eat X" = allergy. "I want X" = preference or instruction.
+5. "preferences" = general likes (ingredients, cuisines). "instructions" = specific requests for this meal.
+6. Distinguish: "I'm vegetarian" = restriction. "I want vegetarian today" = instruction.
 
 EXAMPLE:
 Input: "I'm John. I have diabetes. I want chicken and rice. I'm allergic to peanuts."
-Output: {{"name": "John", "surname": "", "preferences": "chicken, rice", "restrictions": "", "health_condition": "diabetes", "caretaker": "", "allergies": ["peanuts"]}}
+Output: {{"name": "John", "surname": "", "instructions": "chicken, rice", "restrictions": "peanuts", "health_condition": "diabetes", "caretaker": ""}}
 
 EXAMPLE:
 Input: "Quick vegan lunch with tofu"
-Output: {{"name": "", "surname": "", "preferences": "tofu, quick lunch", "restrictions": "vegan", "health_condition": "", "caretaker": "", "allergies": []}}"""
+Output: {{"name": "", "surname": "", "instructions": "tofu, quick lunch", "restrictions": "vegan", "health_condition": "", "caretaker": "", "allergies": []}}"""
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_instructions),
@@ -105,7 +118,7 @@ Output: {{"name": "", "surname": "", "preferences": "tofu, quick lunch", "restri
                 restrictions=result.get("restrictions", ""),
                 health_condition=result.get("health_condition", ""),
                 caretaker=result.get("caretaker", ""),
-                allergies=result.get("allergies", []),
+                instructions=result.get("instructions", ""),
             )
         except Exception as e:
             print(f"Error parsing intent: {e}")
