@@ -12,7 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 DATA_DIR = PROJECT_ROOT / "src" / "data"
-PDF_DIR = PROJECT_ROOT / "data" / "raw"
+PDF_DIR = PROJECT_ROOT / "data_test" / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 
 # MEDICAL_VECTORSTORE_PATH = PROCESSED_DIR / "medical_pdfs_vectorstore"
