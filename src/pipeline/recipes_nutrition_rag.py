@@ -21,6 +21,11 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
 from langchain_core.runnables import Runnable, RunnableConfig
 
+import sys
+
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 from pipeline.base_rag import BaseRAG
 
 warnings.filterwarnings("ignore")
