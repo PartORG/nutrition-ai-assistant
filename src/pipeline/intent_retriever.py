@@ -78,7 +78,7 @@ Do NOT add, guess, or infer anything that the user did not say.
 Return a JSON object with these keys:
 - "name" (string): user's first name, or "" if not stated
 - "surname" (string): user's last name, or "" if not stated
-- "preferences" (string): ingredients the user really likes, cooking style, cuisine preferences, comma-separated, or "" if not stated
+- "preferences" (string): cuisine preferences, comma-separated, or "" if not stated
 - "restrictions" (string): dietary restrictions (vegetarian, vegan, keto, etc.) AND allergies/foods the user cannot eat, comma-separated, or "" if not stated
 - "health_condition" (string): medical conditions like kidney disease, MS, ALS, diabetes, hypertension, comma-separated, or "" if not stated. Use snake_case. Normalize: "high blood pressure" -> "hypertension", "sugar problem" -> "diabetes"
 - "caretaker" (string): caretaker name, or "" if not stated

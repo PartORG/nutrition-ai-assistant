@@ -73,6 +73,7 @@ RULES:
         chunk_size: int = 300,
         chunk_overlap: int = 50,
     ):
+        print("Initializing MedicalRAG...")
         super().__init__(
             embedding_model=embedding_model,
             vectorstore_path=vectorstore_path,
@@ -84,6 +85,14 @@ RULES:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self._start_time = None
+        print("MedicalRAG initialized with the following parameters:")
+        print(f"  Folder paths: {folder_paths}")
+        print(f"  Vectorstore path: {vectorstore_path}")
+        print(f"  Model name: {model_name}")
+        print(f"  Embedding model: {embedding_model}")
+        print(f"  Chunk size: {chunk_size}")
+        print(f"  Chunk overlap: {chunk_overlap}")
+
 
     # ================================================================
     # BaseRAG abstract method implementations
@@ -97,7 +106,8 @@ RULES:
     def _ingest_documents(self) -> List[Document]:
         """Load PDFs from multiple directory paths and split into chunks."""
         documents = []
-
+        print("Starting PDF ingestion...")
+        
         for folder_path in self.folder_paths:
             pdf_folder = Path(folder_path)
 
@@ -130,7 +140,8 @@ RULES:
                 chunk.metadata["id"] = f"chunk_{i}"
             logger.info(f"Split into {len(chunks)} chunks")
             return chunks
-
+        
+        print("PDF ingestion completed.")
         return documents
 
     # ================================================================
@@ -146,12 +157,20 @@ RULES:
             logger.warning("RAG chain not initialized — returning default constraints")
             return self._default_constraints()
 
+        #TODO: fix conditions later sequence item 0: expected str instance, list found
+
+        if isinstance(conditions, list):
+            conditions = ", ".join(conditions)
+            
         query = (
             f"Extract dietary constraints and nutrition guidelines for a patient with: "
-            f"{', '.join(conditions)}. "
+            f"{', '.join([conditions])}. "
             "Return the JSON with avoid list, limit list, and numeric daily constraints."
         )
 
+        print("Retrieving constraints based on user query...")
+        print(f"User query: {query}")
+        
         response = self.rag_chain.invoke({"input": query})
         answer = response.get("answer", "")
 
@@ -167,7 +186,7 @@ RULES:
                     "avoid": [],
                     "limit": [],
                 }
-
+        print("Constraints retrieval completed.")
         return answer
 
     def _default_constraints(self) -> Dict[str, Any]:
@@ -193,6 +212,7 @@ if __name__ == "__main__":
         folder_paths=[str(PDF_DIR)],
         model_name=LLM_MODEL,
         vectorstore_path=str(MEDICAL_VECTORSTORE_PATH),
+        embedding_model="sentence-transformers/multi-qa-MiniLM-L6-cos-v1",
     )
     medical_rag.initialize(force_rebuild=True)
     print("\nMedical RAG ready!")

@@ -171,7 +171,7 @@ class RAGPipeline:
         avoid_foods = constraints.get("avoid", [])
         safe_foods = self.safety_filter.filter(
             candidates=candidates,
-            allergies=intent.allergies,
+            # allergies=intent.allergies,
             constraints=constraints,
             avoid_foods=avoid_foods,
         )
