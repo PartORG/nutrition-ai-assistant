@@ -35,6 +35,17 @@ class MedicalAdvice:
     id: Optional[int] = None
 
 
+@dataclass
+class Authentication:
+    login: str
+    password: str
+    role: str
+    created_at: str
+    deleted_at: str
+    updated_at: str
+    user_id: int
+    id: Optional[int] = None
+
 
 #DATABASE HANDLER
 
@@ -95,10 +106,6 @@ class UserDBHandler:
         conn.close()
         return users
     
-    # ADD HERE new function: read_user(self, username, usersurname)
-    # query select * from users where name== surname== last updated limit 1 
-    # fetchone() - DONE
-
     def read_user(self, name: str, surname: str):
         conn = self.connect()
         cursor = conn.cursor()
@@ -193,6 +200,26 @@ class UserDBHandler:
         conn.close()
         return results
 
+    # AUTHENTICATION TABLE
+
+    def create_authentication_table(self):
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS authentication (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                login TEXT,
+                password TEXT,
+                role TEXT,
+                created_at TEXT,
+                deleted_at TEXT,
+                updated_at TEXT,
+                user_id INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        conn.commit()
+        conn.close()
 
 
 #MAIN: TEST EVERYTHING
@@ -203,6 +230,7 @@ if __name__ == "__main__":
     #create tables
     db.create_users_table()
     db.create_medical_advice_table()
+    db.create_authentication_table()
 
     now = datetime.now().isoformat()
 
