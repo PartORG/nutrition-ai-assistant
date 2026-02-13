@@ -64,7 +64,7 @@ def determine_query_type(query: str) -> str:
     return "both"
 
 
-def smart_retrieve(query: str, vectorstore_recipes, vectorstore_nutrition, k: int = 10) -> List[Document]:
+def smart_retrieve(query: str, vectorstore_recipes, vectorstore_nutrition, k: int = 14) -> List[Document]:
     """Smart retrieval across collections based on query type."""
     query_type = determine_query_type(query)
 
@@ -87,7 +87,7 @@ def smart_retrieve(query: str, vectorstore_recipes, vectorstore_nutrition, k: in
 class SmartRetriever(Runnable):
     """Intelligent retriever that routes queries to appropriate vector collections."""
 
-    def __init__(self, vectorstore_recipes, vectorstore_nutrition, k=10):
+    def __init__(self, vectorstore_recipes, vectorstore_nutrition, k=14):
         self.vectorstore_recipes = vectorstore_recipes
         self.vectorstore_nutrition = vectorstore_nutrition
         self.k = k
@@ -188,7 +188,7 @@ If conflicts occur, ALWAYS prioritize higher levels and explain why.
 
 ## HANDLING SPECIAL CASES
 
-**User Says "I have X/Y/Z in my fridge":**
+**User Says "I have X/Y/Z in my fridge or at home":**
 → PRIORITIZE recipes using those ingredients
 → If no exact match, note which ingredients were used: "This recipe uses your spinach and tomatoes."
 
@@ -199,7 +199,6 @@ If conflicts occur, ALWAYS prioritize higher levels and explain why.
 
 **Missing Nutritional Data:**
 → Calculate from individual ingredients
-→ Show calculation: "Estimated: 200g chicken (330 kcal) + 100g rice (130 kcal) = 460 kcal"
 
 **Conflicting Requirements:**
 → Follow prioritization hierarchy (medical > preference)
@@ -213,7 +212,7 @@ User Query: {input}
 Retrieved Context: {context}
 
 **Generate 3 complete recipes following the MANDATORY STRUCTURE above.**
-**Convert ALL measurements to metric.**
+**Convert ALL measurements to metric system.**
 **Provide complete cooking instructions (never skip this section).**
 
 **Reminder**: These are general recommendations. Consult healthcare providers before significant dietary changes."""
@@ -224,7 +223,7 @@ Retrieved Context: {context}
         vectorstore_path: str,
         model_name: str = "llama3.2",
         temperature: float = 0.5,
-        k: int = 10,
+        k: int = 14,
         ollama_base_url: str = "http://localhost:11434/",
         log_level: str = "INFO",
     ):
