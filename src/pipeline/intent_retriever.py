@@ -135,16 +135,14 @@ CRITICAL DISTINCTION RULES:
    - "Quick breakfast" → instructions
    - "Use ingredients I have at home" → instructions
    - "I have onions, bell peppers" → instructions
-   - "I have at home or in the fridge" → instructions
    - "I have beef steaks at home" → instructions
    - "I have chicken wings in the fridge" → instructions
 
 CRITICAL RULES:
 1. ONLY extract what the user explicitly says. Never fill in a field the user did not mention.
-2. If the user does not mention a field, return "" for strings.
-3. "allergies" goes into "restrictions" field along with dietary restrictions.
-4. "preferences" = general likes (ingredients, cuisines). "instructions" = specific requests for this meal.
-5. Distinguish: "I'm vegetarian" = restriction. "I want vegetarian today" = instruction.
+2. "allergies" goes into "restrictions" field along with dietary restrictions.
+3. "preferences" = general likes (ingredients, cuisines). "instructions" = specific requests for this meal.
+4. Distinguish: "I'm vegetarian" = restriction. "I want vegetarian today" = instruction.
 
 EXAMPLES:
 
