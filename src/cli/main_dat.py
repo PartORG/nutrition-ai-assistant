@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from rich.console import Console
 
-root_dir = Path(__file__).parent.parent.parent
+root_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(root_dir))
 
 from pipeline.test_pipeline import RAGPipeline
@@ -81,7 +81,10 @@ def chat():
             break
         
         answer = pipeline.process(question)
+
+        # 
         answer.display()
+        # ask for more instructions 
 
 
 if __name__ == "__main__":

@@ -144,7 +144,14 @@ class RAGPipeline:
 
         augmented_q = self._step_build_augmented_query(user_query, intent, constraints)
         llm_rec = self._step_get_recommendation(augmented_q)
-        # safe_foods = self._step_safety_filter(intent, constraints, top_k)
+        # parse llm_rec to extract recipe name, ingredients and nutrition info
+        # safe_recipes = self._step_safety_filter(intent, constraints, top_k)
+        # safe_recipes --> parse it and store in database (nutrition history, recipe history, user profile history)
+
+        # show to the user the recipes [in the end add text "which recipy do you want to cook? (type the number)
+        #  or you neeed more examples or conditions?]
+        # here we
+        # user input("which recipy do you want to cook? (type the number)") --> 
 
         return PipelineResult(
             intent=intent,
@@ -161,6 +168,9 @@ class RAGPipeline:
         intent = self.intent_parser.parse(user_query)
         print(f"  → Medical conditions: {intent.health_condition or '(none)'}")
         print(f"  → Dietary restrictions: {intent.restrictions or '(none)'}")
+        print(f"  → Instructions: {intent.instructions or '(none)'}")
+        print(f"  → Preferences: {intent.preferences or '(none)'}")
+        print(f"  → Health condition: {intent.health_condition or '(none)'}")
         # print(f"  → Allergies: {intent.allergies or '(none)'}")
         #print(f"  → Ingredients: {intent.ingredients_list or '(none)'}")
         #print(f"  → Cooking style: {intent.cooking_style or '(none)'}")
