@@ -11,7 +11,7 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 from pipeline.config import (
     PDF_DIR, DATA_DIR,
-    MEDICAL_VECTORSTORE_PATH, NUTRITION_VECTORSTORE_PATH,
+    MEDICAL_VECTORSTORE_PATH, RECIPES_NUTRITION_VECTOR_PATH,
     LLM_MODEL,
 )
 from pipeline.intent_retriever import UserIntent, IntentParser
@@ -26,9 +26,9 @@ class PipelineResult:
     constraints: Dict[str, Any]
     augmented_query: str
     llm_recommendation: str
-    candidates_count: int
-    filtered_count: int
-    safe_foods: List[Dict[str, Any]]
+    # candidates_count: int
+    # filtered_count: int
+    # safe_foods: List[Dict[str, Any]]
 
     def display(self):
         print("\n" + "=" * 60)
@@ -39,9 +39,9 @@ class PipelineResult:
         for k, v in self.constraints.get("constraints", {}).items():
             print(f"  {k}: {v}")
         print(f"\n--- LLM Recommendation ---\n{self.llm_recommendation}")
-        print(f"\n--- Safe Foods ({self.filtered_count}/{self.candidates_count} passed) ---")
-        for i, food in enumerate(self.safe_foods, 1):
-            print(f"  {i}. {food['name']}  |  {food['calories']} cal  |  P:{food['protein_g']}g  C:{food['carbs_g']}g  F:{food['fat_g']}g")
+        # print(f"\n--- Safe Foods ({self.filtered_count}/{self.candidates_count} passed) ---")
+        # for i, food in enumerate(self.safe_foods, 1):
+        #     print(f"  {i}. {food['name']}  |  {food['calories']} cal  |  P:{food['protein_g']}g  C:{food['carbs_g']}g  F:{food['fat_g']}g")
 
 
 class RAGPipeline:
@@ -57,13 +57,16 @@ class RAGPipeline:
     def _step_handle_user(self) -> tuple:
         csv_input = input("Enter user data (name,surname,caretaker,health_condition,age,gender): ")
         name, surname, caretaker, health_condition, age, gender = csv_input.strip().split(",")
-        existing = self.db_handler.read_user(name, surname)
+        print(f"[DB] Handling user: {name} {surname}, caretaker: {caretaker}, health condition: {health_condition}, age: {age},")
+        existing = self.db_handler.read_user(name.strip(), surname.strip())
+        print(f"[DB] Existing user query result: {existing}")
         now = datetime.now().isoformat()
         #todo: try to add a loop function here to handle multiple users in a row, until user types "exit"
+
         if existing:
-            user_id = existing[0]
+            user_id = existing[0] # The ID from the fetched tuple
             print(f"[DB] Found existing user with ID: {user_id}")
-            # user = existing  #it should be something like User (*existing) but we don't need it for now, just the ID
+            return user_id, False  # is_new = False
         else:
             user = User(
                 name=name.strip(),
@@ -78,15 +81,21 @@ class RAGPipeline:
                 age=int(age),
                 gender=gender.strip().capitalize(),
             )
+            # Create new user logic as you already have it...
             user_id = self.db_handler.insert_user(user)
-            print(f"[DB] Inserted new user with ID: {user_id}")
-
-        return user_id
+            return user_id, True   # is_new = True
     
     def step_update_user(self, user_id: int, intent: UserIntent):
+        print(f"[DB] Updating user ID {user_id} with intent data...")
+        print(f"  → Preferences: {intent.ingredients_list}")
+        print(f"  → Restrictions: {intent.restrictions_list}")
+        print(f"  → Health conditions: {intent.health_condition}")
         self.db_handler.update_user(user_id, "preferences", ", ".join(intent.ingredients_list))
-        self.db_handler.update_user(user_id, "restrictions", ", ".join(intent.restrictions))
-        self.db_handler.update_user(user_id, "health_condition", ", ".join(intent.health_condition.split(",")))
+        self.db_handler.update_user(user_id, "restrictions", ", ".join(intent.restrictions_list))
+        if isinstance(intent.health_condition, list):
+            self.db_handler.update_user(user_id, "health_condition", ", ".join(intent.health_condition))
+        else:
+            self.db_handler.update_user(user_id, "health_condition", ", ".join(intent.health_condition.split(",")))
 
     def process(self, user_query: str, top_k: int = 10):
         print("\n" + "=" * 60)
@@ -94,17 +103,35 @@ class RAGPipeline:
         print("=" * 60)
         print(f"Query: {user_query}\n")
 
-        user_id = self._step_handle_user()
-
+        user_id, is_new = self._step_handle_user()
         intent = self._step_parse_intent(user_query)
-
-        #self.db_handler.update_user(user_id, "preferences", ", ".join(intent.ingredients_list))
-        #self.db_handler.update_user(user_id, "restrictions", ", ".join(intent.restrictions))
-        #self.db_handler.update_user(user_id, "health_condition", ", ".join(intent.health_condition.split(",")))
-        #todo: call the db, update user preferences in the db using user_id 
+        print(f"[INTENT] content: {intent}")
         self.step_update_user(user_id, intent)
         
-        constraints = self._step_get_constraints(intent)
+        if not is_new:
+            print("[PIPELINE] Bypassing Medical RAG. Fetching existing advice...")
+            # Get the latest advice tuple from DB
+            db_advice = self.db_handler.get_medical_advice_by_user(user_id)
+            
+            if db_advice:
+                # Assuming medical_advice column stores the notes
+                # To skip MedicalRAG, we reconstruct the constraints dict
+                latest_advice = db_advice[-1] # Get most recent
+                constraints = {
+                    "notes": latest_advice[2], # The medical_advice column
+                    "constraints": {}, # Optional: Add logic to store/parse specific limits
+                    "avoid": [],
+                    "limit": []
+                }
+                print(f"[PIPELINE] Retrieved advice from DB: {constraints['notes']}")
+            else:
+                # Fallback if user exists but has no advice yet
+                constraints = self._step_get_constraints(intent)
+        else:
+            # Full flow for new users
+            constraints = self._step_get_constraints(intent)
+            
+        # constraints = self._step_get_constraints(intent)
 
         advice_text = constraints.get("notes", "")
         if advice_text:
@@ -117,16 +144,23 @@ class RAGPipeline:
 
         augmented_q = self._step_build_augmented_query(user_query, intent, constraints)
         llm_rec = self._step_get_recommendation(augmented_q)
-        safe_foods = self._step_safety_filter(intent, constraints, top_k)
+        # parse llm_rec to extract recipe name, ingredients and nutrition info
+        # safe_recipes = self._step_safety_filter(intent, constraints, top_k)
+        # safe_recipes --> parse it and store in database (nutrition history, recipe history, user profile history)
+
+        # show to the user the recipes [in the end add text "which recipy do you want to cook? (type the number)
+        #  or you neeed more examples or conditions?]
+        # here we
+        # user input("which recipy do you want to cook? (type the number)") --> 
 
         return PipelineResult(
             intent=intent,
             constraints=constraints,
             augmented_query=augmented_q,
             llm_recommendation=llm_rec,
-            candidates_count=safe_foods["candidates_count"],
-            filtered_count=safe_foods["filtered_count"],
-            safe_foods=safe_foods["results"],
+            # candidates_count=0,
+            # filtered_count=0,
+            # safe_foods=safe_foods["results"],
         )
 
     def _step_parse_intent(self, user_query: str) -> UserIntent:
@@ -134,13 +168,17 @@ class RAGPipeline:
         intent = self.intent_parser.parse(user_query)
         print(f"  → Medical conditions: {intent.health_condition or '(none)'}")
         print(f"  → Dietary restrictions: {intent.restrictions or '(none)'}")
-        print(f"  → Allergies: {intent.allergies or '(none)'}")
+        print(f"  → Instructions: {intent.instructions or '(none)'}")
+        print(f"  → Preferences: {intent.preferences or '(none)'}")
+        print(f"  → Health condition: {intent.health_condition or '(none)'}")
+        # print(f"  → Allergies: {intent.allergies or '(none)'}")
         #print(f"  → Ingredients: {intent.ingredients_list or '(none)'}")
         #print(f"  → Cooking style: {intent.cooking_style or '(none)'}")
         return intent
 
     def _step_get_constraints(self, intent: UserIntent) -> Dict:
         print("\n[Step 2] Medical RAG — getting nutrition constraints...")
+        print(f"  → User medical conditions: {intent.health_condition or '(none)'}")
         constraints = self.medical_rag.get_constraints(intent.health_condition)
         print(f"  → Constraints keys: {list(constraints.get('constraints', {}).keys())}")
         print(f"  → Avoid foods: {constraints.get('avoid', [])}")
@@ -169,8 +207,11 @@ class RAGPipeline:
         if intent.restrictions:
             sections.append("DIETARY RESTRICTIONS:\n- " + "\n- ".join(intent.restrictions))
 
+        if intent.preferences:
+                    sections.append("PREFERENCES:\n- " + "\n- ".join(intent.preferences.split(",")))
+
         sections.append("NUTRITION GUIDELINES:\n" + ("\n".join("- " + c for c in constraint_text) if constraint_text else "- General healthy eating"))
-        sections.append("ALLERGIES (MUST AVOID):\n" + ("\n".join("- " + a for a in intent.allergies) if intent.allergies else "- None"))
+        # sections.append("ALLERGIES (MUST AVOID):\n" + ("\n".join("- " + a for a in intent.allergies) if intent.allergies else "- None"))
 
         avoid = constraints.get("avoid", [])
         sections.append("FOODS TO AVOID:\n" + ("\n".join("- " + f for f in avoid) if avoid else "- None"))
@@ -181,8 +222,8 @@ class RAGPipeline:
         if intent.ingredients_list:
             sections.append("DESIRED INGREDIENTS:\n- " + "\n- ".join(intent.ingredients_list))
 
-        #if intent.cooking_style:
-            #sections.append("COOKING STYLE:\n- " + "\n- ".join(intent.cooking_style))
+        if intent.instructions:
+            sections.append("INSTRUCTIONS:\n- " + "\n- ".join(intent.instructions.split(",")))
 
         sections.append("Based on the above, recommend specific safe and healthy food options.\nInclude a brief nutritional breakdown for each.")
         query = "\n\n".join(sections)
@@ -195,16 +236,16 @@ class RAGPipeline:
         print("  → Recommendation received")
         return rec
 
-    def _step_safety_filter(self, intent: UserIntent, constraints: Dict, top_k: int) -> Dict:
+    def _step_safety_filter(self, llm_rec: str, constraints: Dict, top_k: int) -> Dict:
         print("\n[Step 5] Safety Check — filtering unsafe foods...")
-        search_terms = intent.ingredients_list or ["healthy food"]
+        search_terms = self.intent_parser.get_ingredients_list(llm_rec)
         search_query = " ".join(search_terms)
         candidates = self.nutrition_rag.get_retrieved_docs(search_query)
         print(f"  → Retrieved {len(candidates)} candidates")
 
         safe_docs = self.safety_filter.filter(
             candidates=candidates,
-            allergies=intent.allergies,
+            # allergies=intent.allergies,
             constraints=constraints,
             avoid_foods=constraints.get("avoid", []),
         )
@@ -234,10 +275,10 @@ class RAGPipeline:
 
 if __name__ == "__main__":
     intent_parser = IntentParser(model_name=LLM_MODEL)
-    medical_rag = MedicalRAG(folder_paths=[str(PDF_DIR)], model_name=LLM_MODEL, vectorstore_path=str(MEDICAL_VECTORSTORE_PATH))
-    medical_rag.initialize(force_rebuild=False)
+    medical_rag = MedicalRAG(folder_paths=[str(PDF_DIR)], model_name=LLM_MODEL, vectorstore_path=str(MEDICAL_VECTORSTORE_PATH), embedding_model="sentence-transformers/multi-qa-MiniLM-L6-cos-v1")
+    medical_rag.initialize(force_rebuild=False)  # TODO: set back to False after first run
 
-    nutrition_rag = RecipesNutritionRAG(data_folder=str(DATA_DIR), model_name=LLM_MODEL, vectorstore_path=str(NUTRITION_VECTORSTORE_PATH))
+    nutrition_rag = RecipesNutritionRAG(data_folder=str(DATA_DIR), model_name=LLM_MODEL, vectorstore_path=str(RECIPES_NUTRITION_VECTOR_PATH))
     nutrition_rag.initialize()
 
     safety_filter = SafetyFilter(debug=True)

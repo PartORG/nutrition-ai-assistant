@@ -123,6 +123,7 @@ class UserDBHandler:
         user_dict.pop("id", None)
         columns = ", ".join(user_dict.keys())
         placeholders = ", ".join(["?"] * len(user_dict))
+        print(f"[DB] Inserting user: {user_dict}")
         cursor.execute(
             f"INSERT INTO users ({columns}) VALUES ({placeholders})",
             tuple(user_dict.values())
@@ -163,6 +164,10 @@ class UserDBHandler:
         }
         if field not in allowed_fields:
             raise ValueError("Invalid field name")
+
+        if isinstance(new_value, list):
+            new_value = ", ".join(map(str, new_value))
+
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute(
@@ -206,6 +211,8 @@ class UserDBHandler:
         conn = self.connect()
         cursor = conn.cursor()
 
+        if isinstance(advice.medical_advice, list):
+            advice.medical_advice = "\n".join(advice.medical_advice)
         cursor.execute("""
             INSERT INTO medical_advice 
             (health_condition, medical_advice, created_at, updated_at, deleted_at, user_id)

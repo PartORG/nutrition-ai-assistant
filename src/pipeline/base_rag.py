@@ -177,6 +177,7 @@ class BaseRAG(ABC):
 
     def _load_vectorstore(self) -> None:
         """Load an existing FAISS vectorstore from disk."""
+        print(f"Loading vectorstore from {self.vectorstore_path}...")
         self.vectorstore = FAISS.load_local(
             folder_path=str(self.vectorstore_path),
             embeddings=self.embeddings,

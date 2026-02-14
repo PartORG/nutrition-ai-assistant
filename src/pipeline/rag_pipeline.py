@@ -171,7 +171,7 @@ class RAGPipeline:
         avoid_foods = constraints.get("avoid", [])
         safe_foods = self.safety_filter.filter(
             candidates=candidates,
-            allergies=intent.allergies,
+            # allergies=intent.allergies,
             constraints=constraints,
             avoid_foods=avoid_foods,
         )
@@ -261,7 +261,7 @@ if __name__ == "__main__":
 
     # Initialize components
     intent_parser = IntentParser(model_name=LLM_MODEL)
-    medical_rag = MedicalRAG(folder_paths=[str(PDF_DIR)], model_name=LLM_MODEL, vectorstore_path=str(MEDICAL_VECTORSTORE_PATH))
+    medical_rag = MedicalRAG(folder_paths=[str(PDF_DIR)], model_name=LLM_MODEL, vectorstore_path=str(MEDICAL_VECTORSTORE_PATH), embedding_model="sentence-transformers/multi-qa-MiniLM-L6-cos-v1")
     medical_rag.initialize(force_rebuild=False)  # TODO: set to False after first successful rebuild
 
     nutrition_rag = RecipesNutritionRAG(data_folder=str(DATA_DIR), model_name=LLM_MODEL, vectorstore_path=str(RECIPES_NUTRITION_VECTOR_PATH))
