@@ -1,7 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from contextlib import asynccontextmanager
 from pathlib import Path
 import sys
+from datetime import datetime, timedelta
+from typing import Optional
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 # Add src to path
 project_root = Path(__file__).resolve().parent.parent
@@ -14,56 +19,15 @@ sys.path.insert(0, str(project_root / "src"))
 # from pipeline.safety_filter import SafetyFilter
 # from pipeline.test_pipeline import RAGPipeline
 
+# from pipeline.agent import Agent
+
 # Global pipeline instance
 pipeline = None
 
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # Startup: Initialize pipeline
-#     global pipeline
-#     print("🚀 Initializing RAG Pipeline...")
-#     intent_parser = IntentParser(model_name=LLM_MODEL)
-#     medical_rag = MedicalRAG(
-#         folder_paths=[str(PDF_DIR)],
-#         model_name=LLM_MODEL,
-#         vectorstore_path=str(MEDICAL_VECTORSTORE_PATH),
-#         embedding_model="sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
-#     )
-#     medical_rag.initialize(force_rebuild=False)
-    
-#     nutrition_rag = RecipesNutritionRAG(
-#         data_folder=str(DATA_DIR),
-#         model_name=LLM_MODEL,
-#         vectorstore_path=str(RECIPES_NUTRITION_VECTOR_PATH)
-#     )
-#     nutrition_rag.initialize()
-    
-#     safety_filter = SafetyFilter(debug=False)
-    
-#     pipeline = RAGPipeline(
-#         intent_parser=intent_parser,
-#         medical_rag=medical_rag,
-#         nutrition_rag=nutrition_rag,
-#         safety_filter=safety_filter
-#     )
-#     print("✅ Pipeline ready!")
-#     yield
-#     # Shutdown
-#     print("🛑 Shutting down...")
+# Global agent instance
+# agent = Agent()
 
-app = FastAPI(title="Nutrition AI Assistant") #, lifespan=lifespan
+from api.routes.pipeline import router
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-@app.post("/chat")
-async def chat(query: str):
-    if not pipeline:
-        return {"error": "Pipeline not initialized"}
-    result = pipeline.process(query)
-    return {
-        "intent": str(result.intent),
-        "recommendation": result.llm_recommendation,
-        "constraints": result.constraints
-    }
+app = FastAPI(title="Nutrition AI Assistant")
+app.include_router(router)
