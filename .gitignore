@@ -59,3 +59,7 @@ build/
 /data_test
 requirements-dev.txt
 vector_databases/
+
+# claude
+.claude_history/
+.claude/
