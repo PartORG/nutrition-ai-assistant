@@ -113,13 +113,16 @@ class UserDBHandler:
 
         Has a foreign key reference to users(id).
         """
-        # TODO: add new columns: limit, avoid, constraints.
+        # TODO: add new columns: limit, avoid, constraints - completed!
         with self._get_connection() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS medical_advice (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     health_condition TEXT,
                     medical_advice TEXT,
+                    limit TEXT,
+                    avoid TEXT,
+                    constraints TEXT,
                     created_at TEXT,
                     updated_at TEXT,
                     deleted_at TEXT,
@@ -321,9 +324,10 @@ class UserDBHandler:
                 advice.medical_advice = "\n".join(advice.medical_advice)
             cursor = conn.execute(
                 """INSERT INTO medical_advice
-                   (health_condition, medical_advice, created_at, updated_at, deleted_at, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (health_condition, medical_advice, limit, avoid, constraints, created_at, updated_at, deleted_at, user_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (advice.health_condition, advice.medical_advice,
+                 advice.limit, advice.avoid, advice.constraints,
                  advice.created_at, advice.updated_at, advice.deleted_at, advice.user_id),
             )
             return cursor.lastrowid
