@@ -44,6 +44,9 @@ class MedicalAdvice:
     """
     health_condition: str
     medical_advice: str
+    limit: str
+    avoid: str
+    constraints: str
     user_id: int
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
@@ -98,7 +101,8 @@ class RecipeHistory:
     servings: int
     ingredients: str
     prep_time: str
-    restrictions: str
+    cook_instructions: str
+    recipe_name: str
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
     deleted_at: str = ""
