@@ -182,7 +182,8 @@ class UserDBHandler:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
                     recipe_id INTEGER,
-                    restrictions TEXT,
+                    recipe_name TEXT,
+                    cook_instructions TEXT,
                     servings INTEGER,
                     ingredients TEXT,
                     prep_time TEXT,
@@ -610,13 +611,13 @@ class UserDBHandler:
 
         Args:
             history_id: The row ID of the recipe history record.
-            field:      Column name. Must be one of: restrictions, servings, ingredients, prep_time.
+            field:      Column name. Must be one of: cook_instructions, servings, ingredients, prep_time, recipe_name.
             new_value:  The new value.
 
         Raises:
             ValueError: If field is not in the allowed set.
         """
-        allowed_fields = {"restrictions", "servings", "ingredients", "prep_time"}
+        allowed_fields = {"cook_instructions", "servings", "ingredients", "prep_time", "recipe_name"}
         if field not in allowed_fields:
             raise ValueError(f"Invalid field '{field}'. Allowed: {allowed_fields}")
 
