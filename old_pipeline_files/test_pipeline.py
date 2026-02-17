@@ -14,11 +14,12 @@ from pipeline.config import (
     MEDICAL_VECTORSTORE_PATH, RECIPES_NUTRITION_VECTOR_PATH,
     LLM_MODEL,
 )
-from pipeline.intent_retriever import UserIntent, IntentParser
-from pipeline.recipes_nutrition_rag import RecipesNutritionRAG
-from pipeline.medical_rag import MedicalRAG
-from pipeline.safety_filter import SafetyFilter
-from pipeline.db import UserDBHandler, User, MedicalAdvice
+from components.intent_retriever import UserIntent, IntentParser
+from components.safety_filter import SafetyFilter, SafetyCheckResult
+from rags.recipes_nutrition_rag import RecipesNutritionRAG
+from rags.medical_rag import MedicalRAG
+from database.db import UserDBHandler
+from database.models import User, MedicalAdvice, UserProfileHistory
 
 @dataclass
 class PipelineResult:
@@ -26,9 +27,7 @@ class PipelineResult:
     constraints: Dict[str, Any]
     augmented_query: str
     llm_recommendation: str
-    # candidates_count: int
-    # filtered_count: int
-    # safe_foods: List[Dict[str, Any]]
+    safety_result: SafetyCheckResult = None
 
     def display(self):
         print("\n" + "=" * 60)
@@ -38,10 +37,12 @@ class PipelineResult:
         print(f"\n--- Constraints ---")
         for k, v in self.constraints.get("constraints", {}).items():
             print(f"  {k}: {v}")
-        print(f"\n--- LLM Recommendation ---\n{self.llm_recommendation}")
-        # print(f"\n--- Safe Foods ({self.filtered_count}/{self.candidates_count} passed) ---")
-        # for i, food in enumerate(self.safe_foods, 1):
-        #     print(f"  {i}. {food['name']}  |  {food['calories']} cal  |  P:{food['protein_g']}g  C:{food['carbs_g']}g  F:{food['fat_g']}g")
+        if self.safety_result:
+            print(f"\n--- Safety Check ---")
+            print(self.safety_result.summary)
+            print(f"\n--- Safe Recipes ---\n{self.safety_result.safe_recipes_markdown}")
+        else:
+            print(f"\n--- LLM Recommendation ---\n{self.llm_recommendation}")
 
 
 class RAGPipeline:
@@ -51,8 +52,7 @@ class RAGPipeline:
         self.nutrition_rag = nutrition_rag
         self.safety_filter = safety_filter
         self.db_handler = UserDBHandler()
-        self.db_handler.create_users_table()
-        self.db_handler.create_medical_advice_table()
+        self.db_handler.create_all_tables()
 
     def _step_handle_user(self) -> tuple:
         csv_input = input("Enter user data (name,surname,caretaker,health_condition,age,gender): ")
@@ -71,31 +71,41 @@ class RAGPipeline:
             user = User(
                 name=name.strip(),
                 surname=surname.strip(),
-                preferences="",
-                restrictions="",
-                health_condition=health_condition.strip(),
+                user_name=f"{name.strip()}{surname.strip()}",
                 caretaker=caretaker.strip(),
-                created_at=now,
-                updated_at=now,
-                deleted_at="",
                 age=int(age),
                 gender=gender.strip().capitalize(),
             )
-            # Create new user logic as you already have it...
             user_id = self.db_handler.insert_user(user)
+
+            # Store health profile in the correct table
+            profile = UserProfileHistory(
+                preferences="",
+                user_id=user_id,
+                health_condition=health_condition.strip(),
+                restrictions="",
+            )
+            self.db_handler.insert_user_profile_history(profile)
             return user_id, True   # is_new = True
     
     def step_update_user(self, user_id: int, intent: UserIntent):
-        print(f"[DB] Updating user ID {user_id} with intent data...")
+        """Save the user's current profile as a new UserProfileHistory snapshot."""
+        print(f"[DB] Saving profile snapshot for user ID {user_id}...")
         print(f"  → Preferences: {intent.ingredients_list}")
         print(f"  → Restrictions: {intent.restrictions_list}")
         print(f"  → Health conditions: {intent.health_condition}")
-        self.db_handler.update_user(user_id, "preferences", ", ".join(intent.ingredients_list))
-        self.db_handler.update_user(user_id, "restrictions", ", ".join(intent.restrictions_list))
-        if isinstance(intent.health_condition, list):
-            self.db_handler.update_user(user_id, "health_condition", ", ".join(intent.health_condition))
-        else:
-            self.db_handler.update_user(user_id, "health_condition", ", ".join(intent.health_condition.split(",")))
+
+        health = intent.health_condition
+        if isinstance(health, list):
+            health = ", ".join(health)
+
+        profile = UserProfileHistory(
+            preferences=", ".join(intent.ingredients_list),
+            user_id=user_id,
+            health_condition=health,
+            restrictions=", ".join(intent.restrictions_list),
+        )
+        self.db_handler.insert_user_profile_history(profile)
 
     def process(self, user_query: str, top_k: int = 10):
         print("\n" + "=" * 60)
@@ -144,23 +154,16 @@ class RAGPipeline:
 
         augmented_q = self._step_build_augmented_query(user_query, intent, constraints)
         llm_rec = self._step_get_recommendation(augmented_q)
-        # parse llm_rec to extract recipe name, ingredients and nutrition info
-        # safe_recipes = self._step_safety_filter(intent, constraints, top_k)
-        # safe_recipes --> parse it and store in database (nutrition history, recipe history, user profile history)
 
-        # show to the user the recipes [in the end add text "which recipy do you want to cook? (type the number)
-        #  or you neeed more examples or conditions?]
-        # here we
-        # user input("which recipy do you want to cook? (type the number)") --> 
+        # Step 5: Safety filter — parse recipes from LLM output, check against constraints
+        safety_result = self._step_safety_check(llm_rec, constraints, intent)
 
         return PipelineResult(
             intent=intent,
             constraints=constraints,
             augmented_query=augmented_q,
             llm_recommendation=llm_rec,
-            # candidates_count=0,
-            # filtered_count=0,
-            # safe_foods=safe_foods["results"],
+            safety_result=safety_result,
         )
 
     def _step_parse_intent(self, user_query: str) -> UserIntent:
@@ -236,41 +239,16 @@ class RAGPipeline:
         print("  → Recommendation received")
         return rec
 
-    def _step_safety_filter(self, llm_rec: str, constraints: Dict, top_k: int) -> Dict:
-        print("\n[Step 5] Safety Check — filtering unsafe foods...")
-        search_terms = self.intent_parser.get_ingredients_list(llm_rec)
-        search_query = " ".join(search_terms)
-        candidates = self.nutrition_rag.get_retrieved_docs(search_query)
-        print(f"  → Retrieved {len(candidates)} candidates")
-
-        safe_docs = self.safety_filter.filter(
-            candidates=candidates,
-            # allergies=intent.allergies,
-            constraints=constraints,
-            avoid_foods=constraints.get("avoid", []),
+    def _step_safety_check(self, llm_rec: str, constraints: Dict, intent: UserIntent) -> SafetyCheckResult:
+        """Check LLM recipe output against user constraints using the safety filter."""
+        print("\n[Step 5] Safety Check — validating recipes against constraints...")
+        safety_result = self.safety_filter.check(
+            recipe_markdown=llm_rec,
+            medical_constraints=constraints,
+            user_intent=intent,
         )
-
-        print(f"  → {len(safe_docs)} safe foods after filtering")
-
-        results = [
-            {
-                "name": doc.metadata.get("name"),
-                "calories": doc.metadata.get("calories", 0),
-                "protein_g": doc.metadata.get("protein_g", 0),
-                "carbs_g": doc.metadata.get("carbs_g", 0),
-                "fat_g": doc.metadata.get("fat_g", 0),
-                "fiber_g": doc.metadata.get("fiber_g", 0),
-                "sugar_g": doc.metadata.get("sugar_g", 0),
-                "sodium_mg": doc.metadata.get("sodium_mg", 0),
-            }
-            for doc in safe_docs[:top_k]
-        ]
-
-        return {
-            "candidates_count": len(candidates),
-            "filtered_count": len(safe_docs),
-            "results": results,
-        }
+        print(f"  → {safety_result.safe_count}/{safety_result.total_count} recipes passed")
+        return safety_result
 
 
 if __name__ == "__main__":
@@ -281,7 +259,7 @@ if __name__ == "__main__":
     nutrition_rag = RecipesNutritionRAG(data_folder=str(DATA_DIR), model_name=LLM_MODEL, vectorstore_path=str(RECIPES_NUTRITION_VECTOR_PATH))
     nutrition_rag.initialize()
 
-    safety_filter = SafetyFilter(debug=True)
+    safety_filter = SafetyFilter(model_name=LLM_MODEL, debug=True)
 
     pipeline = RAGPipeline(
         intent_parser=intent_parser,
