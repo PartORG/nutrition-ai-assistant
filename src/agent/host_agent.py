@@ -15,11 +15,15 @@ from typing import Dict, List, Optional, Any
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain.agents import AgentExecutor, create_structured_chat_agent
 from langchain_community.chat_models import ChatOllama
 from langchain.memory import ConversationBufferMemory
-from langchain.tools import Tool
-from langchain.prompts import PromptTemplate
+from langchain.tools import StructuredTool
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from pydantic import BaseModel, Field
+
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
 
 # Import your existing components
 from pipeline.pipeline import RAGPipeline, PipelineResult
@@ -27,6 +31,7 @@ from database.db import UserDBHandler
 from database.models import RecipeHistory, NutritionHistory
 from settings import LLM_MODEL
 
+load_dotenv()
 
 class AgentState:
     """Manages state across agent interactions.
@@ -71,6 +76,12 @@ def parse_recipes_from_markdown(markdown_text: str) -> List[Dict[str, Any]]:
     pattern = r"### Recipe (\d+): (.+?)\n- \*\*Servings:\*\* (\d+)\n- \*\*Prep Time:\*\* (.+?)\n- \*\*Ingredients:\*\* (.+?)\n- \*\*Instructions:\*\* (.+?)\n- \*\*Nutrition:\*\* (.+?)(?=\n\n###|\Z)"
     
     matches = re.findall(pattern, markdown_text, re.DOTALL)
+
+    # FALLBACK if Regex fails:
+    if not matches:
+        print(f"⚠️ WARNING: Could not parse recipes from markdown. Raw output:\n{markdown_text[:500]}...")
+        # Optional: Simple fallback parsing
+        return []
     
     for match in matches:
         recipe_num, name, servings, prep_time, ingredients, cook_instructions, nutrition = match
@@ -105,6 +116,19 @@ def parse_recipes_from_markdown(markdown_text: str) -> List[Dict[str, Any]]:
         recipes.append(recipe)
     
     return recipes
+
+# ----------------------------------------------------------------
+# Tool Input Schemas (for Structured Tools)
+# ----------------------------------------------------------------
+
+class RAGPipelineInput(BaseModel):
+    """Input schema for RAG pipeline tool."""
+    query: str = Field(description="User's recipe request or search query")
+
+class DatabaseHandlingInput(BaseModel):
+    """Input schema for database handling tool."""
+    recipe_number: int = Field(description="Recipe number from previous recommendations (1, 2, 3, etc.)")
+    rating: int = Field(default=None, description="Optional rating from 1-5 stars")
 
 
 def rag_pipeline_tool_func(query: str) -> str:
@@ -174,16 +198,19 @@ def rag_pipeline_tool_func(query: str) -> str:
         agent_state.last_recipes = parsed_recipes
         agent_state.last_raw_output = output_text
         
-        # Add helper text for user
-        footer = f"\n\n---\n**Found {len(parsed_recipes)} recipes.** Reply with the recipe number you'd like to cook (e.g., 'I'll cook recipe 2'), or ask for more suggestions."
+        # Output footer:
+        if len(parsed_recipes) > 0:
+            footer = f"\n\n---\n✨ **Found {len(parsed_recipes)} recipes above!**\n\n💬 **What would you like to do?**\n- Cook one? (e.g., 'I'll cook recipe 2')\n- Need more options? (e.g., 'Show me more vegetarian recipes')\n- Have questions? Just ask!"
+        else:
+            footer = "\n\n---\n⚠️ No recipes found. Try rephrasing your request (e.g., 'low-carb dinner with fish')."
         
         return output_text + footer
         
     except Exception as e:
-        return f"Error fetching recipes: {str(e)}. Please try rephrasing your request."
+        return f"Error: {str(e)}"
     
 
-def database_handling_tool_func(input_str: str) -> str:
+def database_handling_tool_func(recipe_number: int, rating: int = None) -> str:
     """Tool: Save selected recipe to database.
     
     This tool should ONLY be called when:
@@ -191,22 +218,13 @@ def database_handling_tool_func(input_str: str) -> str:
     - User wants to rate a recipe they cooked
     
     Args:
-        input_str: Expected format "recipe_number:2,rating:5" or just "recipe_number:2"
+    recipe_number: Recipe number from previous recommendations (1, 2, 3, etc.)
+    rating: Optional rating from 1-5 stars (default: None)
     
     Returns:
         Confirmation message or error
     """
     try:
-        # Parse input (format: "recipe_number:2,rating:4")
-        params = {}
-        for item in input_str.split(","):
-            if ":" in item:
-                key, value = item.split(":", 1)
-                params[key.strip()] = value.strip()
-        
-        recipe_number = int(params.get("recipe_number", 0))
-        rating = int(params.get("rating", 0)) if "rating" in params else None
-        
         # Validate
         if recipe_number <= 0:
             return "Please specify a valid recipe number (e.g., 'recipe_number:2')."
@@ -230,19 +248,19 @@ def database_handling_tool_func(input_str: str) -> str:
         
         # Save to RecipeHistory
         recipe_history = RecipeHistory(
-            user_id=agent_state.user_id or 1,  # Fallback for testing
+            user_id=agent_state.user_id or 1,  # Fallback for testing TODO: delete 'or 1' when testing is done
             recipe_id=recipe_id,
             recipe_name=recipe["recipe_name"],
             servings=recipe["servings"],
             ingredients=recipe["ingredients"],
-            instructions=recipe["instructions"],
+            cook_instructions=recipe["cook_instructions"],
             prep_time=recipe["prep_time"],
         )
         history_id = db_handler.insert_recipe_history(recipe_history)
         
         # Save to NutritionHistory
         nutrition_history = NutritionHistory(
-            user_id=agent_state.user_id or 1,
+            user_id=agent_state.user_id or 1, # TODO: delete 'or 1' after testing
             recipe_id=recipe_id,
             calories=recipe.get("calories", 0),
             protein=recipe.get("protein", 0),
@@ -257,49 +275,17 @@ def database_handling_tool_func(input_str: str) -> str:
         # Clear state after successful save
         agent_state.clear_recipes()
         
-        response = f"✅ Recipe '{recipe['recipe_name']}' saved successfully (ID: {history_id})!"
+        response = f"✅ **Recipe saved successfully!**\n\n📋 **Details:**\n- Recipe: {recipe['recipe_name']}\n- ID: {history_id}\n- Servings: {recipe['servings']}\n- Prep Time: {recipe['prep_time']}"
+        
         if rating:
-            response += f" Rating: {rating}/5 ⭐"
+            response += f"\n- Your Rating: {rating}/5 ⭐"
+        
+        response += "\n\n🍳 **Enjoy cooking!** Need more recipes? Just ask!"
         
         return response
         
     except Exception as e:
         return f"Error saving recipe: {str(e)}"
-
-
-AGENT_PROMPT_TEMPLATE = """You are a helpful nutrition assistant chatbot.
-
-Your job is to help users find recipes and save them to their cooking history.
-
-IMPORTANT WORKFLOW:
-1. When user asks for recipe recommendations → Use 'rag_pipeline' tool
-2. After showing recipes → Ask user if they want to cook one or need more suggestions
-3. When user selects a recipe (e.g., "I'll cook recipe 2") → Use 'database_handling' tool with format: "recipe_number:2"
-4. For general questions → Answer directly without tools
-
-TOOLS AVAILABLE:
-{tools}
-
-TOOL NAMES: {tool_names}
-
-CONVERSATION HISTORY:
-{chat_history}
-
-USER INPUT: {input}
-
-REASONING PROCESS (think step by step):
-{agent_scratchpad}
-
-Remember:
-- Always parse recipe numbers from user messages (e.g., "recipe 2", "#2", "the second one")
-- Confirm before saving to database
-- Be friendly and conversational
-"""
-
-agent_prompt = PromptTemplate(
-    input_variables=["tools", "tool_names", "chat_history", "input", "agent_scratchpad"],
-    template=AGENT_PROMPT_TEMPLATE,
-)
 
 
 def create_nutrition_agent(user_id: Optional[int] = None, user_data: Optional[Dict] = None) -> AgentExecutor:
@@ -312,62 +298,108 @@ def create_nutrition_agent(user_id: Optional[int] = None, user_data: Optional[Di
     Returns:
         Configured AgentExecutor ready for chat
     """
-    # Set user context in state
     if user_id:
         agent_state.user_id = user_id
     if user_data:
         agent_state.user_data = user_data
     
-    # Initialize Ollama LLM
-    llm = ChatOllama(
-        model="llama3:8b",
-        temperature=0.1,  # Low temp for consistent tool selection
+    # llm = ChatOllama(
+    #     model="llama3:8b",
+    #     temperature=0,
+    #     ollama_base_url="http://localhost:11434",
+    # )
+
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0,
+        max_tokens=512,
     )
-    
-    # Define tools
     tools = [
-        Tool(
-            name="rag_pipeline",
+        StructuredTool.from_function(
             func=rag_pipeline_tool_func,
-            description=(
-                "Use this tool to search for recipe recommendations. "
-                "Input should be the user's recipe request or query. "
-                "ONLY use this when user explicitly asks for recipes or more suggestions."
-            ),
+            name="search_recipes",
+            description="Search for recipe recommendations based on user query. Use this when user asks for recipes or meal suggestions.",
+            args_schema=RAGPipelineInput,
         ),
-        Tool(
-            name="database_handling",
+        StructuredTool.from_function(
             func=database_handling_tool_func,
-            description=(
-                "Use this tool to save a selected recipe to the user's cooking history. "
-                "Input format: 'recipe_number:X,rating:Y' (rating is optional). "
-                "ONLY use this when user selects a specific recipe number."
-            ),
+            name="save_recipe",
+            description="Save a selected recipe to user's cooking history. Use when user chooses a recipe by number.",
+            args_schema=DatabaseHandlingInput,
         ),
     ]
     
-    # Setup memory
+    system_message = """You are a helpful nutrition assistant that helps users find and save recipes.
+
+You have access to the following tools:
+
+{tools}
+
+Use a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).
+
+Valid "action" values: "Final Answer" or {tool_names}
+
+IMPORTANT RULES:
+1. When user asks for recipes or meal suggestions → ALWAYS use 'search_recipes' tool
+2. Return the COMPLETE tool output to the user WITHOUT modification
+3. After showing recipes, ask if user wants to cook one or needs more suggestions
+4. When user selects a recipe by NUMBER (e.g., "I'll cook recipe 2", "recipe 3", "the second one") → use 'save_recipe' tool
+5. For general questions not about recipes → answer directly with "Final Answer"
+
+WORKFLOW EXAMPLES:
+
+Example 1 - Recipe Search:
+User: "I need dinner ideas with chicken"
+Thought: User wants recipes, I should use search_recipes tool
+Action:
+WORKFLOW EXAMPLES:
+
+Example 1 - Recipe Search:
+User: "I need dinner ideas with chicken"
+Action: Use 'search_recipes' with query "dinner ideas with chicken"
+Response: [Show FULL tool output] + "Would you like to cook one of these, or see more options?"
+
+Example 2 - Recipe Selection:
+User: "I'll cook recipe 2"
+Action: Use 'save_recipe' with recipe_number=2
+Response: "Recipe saved! Enjoy cooking!"
+
+Example 3 - General Question:
+User: "What's the difference between protein and carbs?"
+Action: No tool needed
+Response: [Direct answer]
+
+CRITICAL: 
+- Always show the COMPLETE recipe details from search_recipes
+- Parse recipe numbers from natural language (e.g., "second one" = recipe 2)"""
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_message),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+        ("human", "{agent_scratchpad}"),
+    ])
+    
     memory = ConversationBufferMemory(
         memory_key="chat_history",
         return_messages=True,
-        output_key="output",  # Important for AgentExecutor
+        output_key="output",
     )
     
-    # Create ReAct agent
-    agent = create_react_agent(
+    agent = create_structured_chat_agent(
         llm=llm,
         tools=tools,
-        prompt=agent_prompt,
+        prompt=prompt,
     )
     
-    # Wrap in executor
     agent_executor = AgentExecutor(
         agent=agent,
         tools=tools,
         memory=memory,
-        verbose=True,  # For debugging
+        verbose=True,
         handle_parsing_errors=True,
-        max_iterations=1,  # Prevent infinite loops
+        max_iterations=2,
+        return_intermediate_steps=False,
     )
     
     return agent_executor
