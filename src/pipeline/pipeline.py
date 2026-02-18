@@ -110,18 +110,19 @@ class RAGPipeline:
 
         # TODO: delete from here --> handle by login in App
         # Step 0: Handle user registration / lookup
-        user_id, is_new = self._step_handle_user(user_data)
+        # user_id, is_new = self._step_handle_user(user_data) #TODO: delete this line after testing
 
         # Step 1: Parse intent from query
         intent = self._step_parse_intent(user_query)
         print(f"[INTENT] content: {intent}")
-        self._step_update_user(user_id, intent)
+        # self._step_update_user(user_id, intent) TODO remove comment after testing
+        is_new=True #TODO: delete this line after testing
 
         # Step 2: Get medical constraints (from RAG or DB cache)
         if not is_new:
             print("[PIPELINE] Bypassing Medical RAG. Fetching existing advice...")
             # TODO: update db function to get new columns too
-            db_advice = self.db_handler.get_medical_advice_by_user(user_id)
+            db_advice = self.db_handler.get_medical_advice_by_user(2) #TODO: change to user_id again
 
             if db_advice:
                 # TODO: store constraints, avoid and limit (from Medical RAG) in the medical_advice table.
@@ -144,7 +145,10 @@ class RAGPipeline:
             advice = MedicalAdvice(
                 health_condition=intent.health_condition or "",
                 medical_advice=advice_text,
-                user_id=user_id,
+                user_id=2, # TODO: change to user_id again
+                dietary_limit=str(constraints.get("limit", {})),
+                dietary_constraints=str(constraints.get("constraints", {})),
+                avoid=str(constraints.get("avoid", [])),
             )
             self.db_handler.insert_medical_advice(advice)
 
