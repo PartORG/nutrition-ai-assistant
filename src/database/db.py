@@ -120,9 +120,9 @@ class UserDBHandler:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     health_condition TEXT,
                     medical_advice TEXT,
-                    limit TEXT,
+                    dietary_limit TEXT,
                     avoid TEXT,
-                    constraints TEXT,
+                    dietary_constraints TEXT,
                     created_at TEXT,
                     updated_at TEXT,
                     deleted_at TEXT,
@@ -325,10 +325,10 @@ class UserDBHandler:
                 advice.medical_advice = "\n".join(advice.medical_advice)
             cursor = conn.execute(
                 """INSERT INTO medical_advice
-                   (health_condition, medical_advice, limit, avoid, constraints, created_at, updated_at, deleted_at, user_id)
+                   (health_condition, medical_advice, dietary_limit, avoid, dietary_constraints, created_at, updated_at, deleted_at, user_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (advice.health_condition, advice.medical_advice,
-                 advice.limit, advice.avoid, advice.constraints,
+                 advice.dietary_limit, advice.avoid, advice.dietary_constraints,
                  advice.created_at, advice.updated_at, advice.deleted_at, advice.user_id),
             )
             return cursor.lastrowid
