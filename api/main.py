@@ -27,7 +27,7 @@ pipeline = None
 # Global agent instance
 # agent = Agent()
 
-from api.routes.pipeline import router
+from routes.pipeline import router
 
 app = FastAPI(title="Nutrition AI Assistant")
 app.include_router(router)
