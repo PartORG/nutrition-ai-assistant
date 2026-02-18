@@ -44,9 +44,9 @@ class MedicalAdvice:
     """
     health_condition: str
     medical_advice: str
-    limit: str
+    dietary_limit: str
     avoid: str
-    constraints: str
+    dietary_constraints: str
     user_id: int
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
