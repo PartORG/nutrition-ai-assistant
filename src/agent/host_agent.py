@@ -22,16 +22,11 @@ from langchain.tools import StructuredTool
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 
-# from dotenv import load_dotenv
-# from langchain_groq import ChatGroq
-
 # Import your existing components
 from pipeline.pipeline import RAGPipeline, PipelineResult
 from database.db import UserDBHandler
 from database.models import RecipeHistory, NutritionHistory
 from settings import LLM_MODEL
-
-# load_dotenv()
 
 class AgentState:
     """Manages state across agent interactions.
@@ -328,12 +323,6 @@ def create_nutrition_agent(user_id: Optional[int] = None, user_data: Optional[Di
         temperature=0,
         ollama_base_url="http://localhost:11434",
     )
-
-    # llm = ChatGroq(
-    #     model="llama-3.3-70b-versatile",
-    #     temperature=0,
-    #     max_tokens=512,
-    # )
 
     tools = [
         StructuredTool.from_function(
