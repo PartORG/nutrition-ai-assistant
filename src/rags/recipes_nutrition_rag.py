@@ -193,8 +193,7 @@ Retrieved Context: {context}
 **Generate 3 complete recipes following the MANDATORY STRUCTURE above.**
 **Convert ALL measurements to metric system.**
 **Provide complete cooking instructions (never skip this section).**
-
-**Reminder**: These are general recommendations. Consult healthcare providers before significant dietary changes."""
+**Always add Reminder at the end**: These are general recommendations. Consult healthcare providers before significant dietary changes."""
 
     def __init__(
         self,

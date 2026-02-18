@@ -22,16 +22,11 @@ from langchain.tools import StructuredTool
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 
-from dotenv import load_dotenv
-from langchain_groq import ChatGroq
-
 # Import your existing components
 from pipeline.pipeline import RAGPipeline, PipelineResult
 from database.db import UserDBHandler
 from database.models import RecipeHistory, NutritionHistory
 from settings import LLM_MODEL
-
-load_dotenv()
 
 class AgentState:
     """Manages state across agent interactions.
@@ -54,49 +49,23 @@ class AgentState:
 agent_state = AgentState()
 
 def parse_recipes_from_markdown(markdown_text: str) -> List[Dict[str, Any]]:
-    """Extract structured recipe data from RAG pipeline markdown output.
-    
-    Expected format:
-    ### Recipe 1: Spaghetti Carbonara
-    - **Servings:** 4
-    - **Prep Time:** 30 minutes
-    - **Ingredients:** pasta, eggs, bacon, ...
-    - **Instructions:** 1. Boil pasta... 2. Cook bacon...
-    - **Nutrition:** Calories: 450, Protein: 25g, Carbs: 50g, Fat: 18g
-    
-    Args:
-        markdown_text: Raw markdown output from pipeline
-        
-    Returns:
-        List of recipe dictionaries with parsed fields
-    """
+    """Extract structured recipe data from RAG pipeline markdown output."""
     recipes = []
     
-    # Regex pattern to match recipe blocks
-    pattern = r"### Recipe (\d+): (.+?)\n- \*\*Servings:\*\* (\d+)\n- \*\*Prep Time:\*\* (.+?)\n- \*\*Ingredients:\*\* (.+?)\n- \*\*Instructions:\*\* (.+?)\n- \*\*Nutrition:\*\* (.+?)(?=\n\n###|\Z)"
+    # ✅ NEUES PATTERN (angepasst an tatsächlichen Output)
+    pattern = r"\*\*Recipe (\d+): (.+?)\*\*\s+Servings: (\d+)\s+Prep Time: (.+?)\s+(?:Cook Time: .+?\s+)?(?:Total Time: .+?\s+)?Ingredients:\s+(.+?)\s+Instructions:\s+(.+?)\s+Nutrition Facts \(per serving\):\s+- Calories: (\d+)\s+- Protein: ([\d.]+)g\s+- Fat: ([\d.]+)g\s+- Saturated Fat: ([\d.]+)g\s+- Cholesterol: ([\d.]+)mg\s+- Sodium: ([\d.]+)mg\s+- Carbohydrates: ([\d.]+)g\s+- Fiber: ([\d.]+)g\s+- Sugars: ([\d.]+)g"
     
     matches = re.findall(pattern, markdown_text, re.DOTALL)
-
-    # FALLBACK if Regex fails:
+    
     if not matches:
-        print(f"⚠️ WARNING: Could not parse recipes from markdown. Raw output:\n{markdown_text[:500]}...")
-        # Optional: Simple fallback parsing
-        return []
+        print(f"⚠️ WARNING: Could not parse recipes. Trying fallback parser...")
+        # FALLBACK: Simple split by "**Recipe"
+        return parse_recipes_fallback(markdown_text)
     
     for match in matches:
-        recipe_num, name, servings, prep_time, ingredients, cook_instructions, nutrition = match
-        
-        # Parse nutrition string: "Calories: 450, Protein: 25g, ..."
-        nutrition_dict = {}
-        for item in nutrition.split(","):
-            if ":" in item:
-                key, value = item.split(":", 1)
-                key = key.strip().lower()
-                value = value.strip().rstrip("g").strip()
-                try:
-                    nutrition_dict[key] = float(value)
-                except ValueError:
-                    nutrition_dict[key] = value
+        (recipe_num, name, servings, prep_time, ingredients, 
+         instructions, calories, protein, fat, sat_fat, cholesterol, 
+         sodium, carbs, fiber, sugars) = match
         
         recipe = {
             "recipe_number": int(recipe_num),
@@ -104,16 +73,62 @@ def parse_recipes_from_markdown(markdown_text: str) -> List[Dict[str, Any]]:
             "servings": int(servings),
             "prep_time": prep_time.strip(),
             "ingredients": ingredients.strip(),
-            "cook_instructions": cook_instructions.strip(),
-            "calories": nutrition_dict.get("calories", 0),
-            "protein": nutrition_dict.get("protein", 0),
-            "carbs": nutrition_dict.get("carbs", 0),
-            "fat": nutrition_dict.get("fat", 0),
-            "fiber": nutrition_dict.get("fiber", 0),
-            "sugar": nutrition_dict.get("sugar", 0),
-            "sodium": nutrition_dict.get("sodium", 0),
+            "cook_instructions": instructions.strip(),
+            "calories": float(calories),
+            "protein": float(protein),
+            "fat": float(fat),
+            "carbs": float(carbs),
+            "fiber": float(fiber),
+            "sugar": float(sugars),
+            "sodium": float(sodium),
         }
         recipes.append(recipe)
+    
+    return recipes
+
+
+def parse_recipes_fallback(markdown_text: str) -> List[Dict[str, Any]]:
+    """Fallback parser for when regex fails."""
+    recipes = []
+    
+    # Split by "**Recipe X:"
+    recipe_blocks = re.split(r'\*\*Recipe \d+:', markdown_text)[1:]  # Skip first empty part
+    
+    for idx, block in enumerate(recipe_blocks, start=1):
+        # Extract basic info with simpler patterns
+        name_match = re.search(r'^(.+?)\*\*', block)
+        servings_match = re.search(r'Servings: (\d+)', block)
+        prep_time_match = re.search(r'Prep Time: (.+?)(?:\n|$)', block)
+        
+        # Extract ingredients block
+        ingredients_match = re.search(r'Ingredients:\s*\n(.+?)\n\nInstructions:', block, re.DOTALL)
+        
+        # Extract instructions block
+        instructions_match = re.search(r'Instructions:\s*\n(.+?)\n\nNutrition Facts', block, re.DOTALL)
+        
+        # Extract nutrition
+        calories_match = re.search(r'Calories: (\d+)', block)
+        protein_match = re.search(r'Protein: ([\d.]+)g', block)
+        carbs_match = re.search(r'Carbohydrates: ([\d.]+)g', block)
+        fat_match = re.search(r'Fat: ([\d.]+)g', block)
+        
+        if name_match and servings_match:
+            recipe = {
+                "recipe_number": idx,
+                "recipe_name": name_match.group(1).strip(),
+                "servings": int(servings_match.group(1)),
+                "prep_time": prep_time_match.group(1).strip() if prep_time_match else "Unknown",
+                "ingredients": ingredients_match.group(1).strip() if ingredients_match else "",
+                "cook_instructions": instructions_match.group(1).strip() if instructions_match else "",
+                "calories": float(calories_match.group(1)) if calories_match else 0,
+                "protein": float(protein_match.group(1)) if protein_match else 0,
+                "carbs": float(carbs_match.group(1)) if carbs_match else 0,
+                "fat": float(fat_match.group(1)) if fat_match else 0,
+                "fiber": 0,
+                "sugar": 0,
+                "sodium": 0,
+            }
+            recipes.append(recipe)
     
     return recipes
 
@@ -303,17 +318,12 @@ def create_nutrition_agent(user_id: Optional[int] = None, user_data: Optional[Di
     if user_data:
         agent_state.user_data = user_data
     
-    # llm = ChatOllama(
-    #     model="llama3:8b",
-    #     temperature=0,
-    #     ollama_base_url="http://localhost:11434",
-    # )
-
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
+    llm = ChatOllama(
+        model="llama3:8b",
         temperature=0,
-        max_tokens=512,
+        ollama_base_url="http://localhost:11434",
     )
+
     tools = [
         StructuredTool.from_function(
             func=rag_pipeline_tool_func,
@@ -339,39 +349,91 @@ Use a json blob to specify a tool by providing an action key (tool name) and an 
 
 Valid "action" values: "Final Answer" or {tool_names}
 
-IMPORTANT RULES:
+CRITICAL WORKFLOW:
 1. When user asks for recipes or meal suggestions → ALWAYS use 'search_recipes' tool
-2. Return the COMPLETE tool output to the user WITHOUT modification
+2. AFTER tool returns Observation → IMMEDIATELY use "Final Answer" with the COMPLETE tool output (DO NOT modify or summarize!)
 3. After showing recipes, ask if user wants to cook one or needs more suggestions
-4. When user selects a recipe by NUMBER (e.g., "I'll cook recipe 2", "recipe 3", "the second one") → use 'save_recipe' tool
+4. When user selects a recipe by NUMBER (e.g., "I'll cook recipe 2", "recipe 3", "the second one") → use 'save_recipe' tool, then "Final Answer" with confirmation
 5. For general questions not about recipes → answer directly with "Final Answer"
 
+RESPONSE FORMAT (follow exactly):
+
+Step 1 - Call Tool:
+```json
+{{
+  "action": "search_recipes",
+  "action_input": {{"query": "chicken dinner"}}
+}}
+```
+
+Step 2 - After Observation, IMMEDIATELY use Final Answer:
+```json
+{{
+  "action": "Final Answer",
+  "action_input": "[PASTE COMPLETE OBSERVATION TEXT HERE WITHOUT ANY CHANGES]"
+}}
+```
+
 WORKFLOW EXAMPLES:
 
 Example 1 - Recipe Search:
 User: "I need dinner ideas with chicken"
-Thought: User wants recipes, I should use search_recipes tool
+Thought: User wants recipes, I must use search_recipes tool
 Action:
-WORKFLOW EXAMPLES:
-
-Example 1 - Recipe Search:
-User: "I need dinner ideas with chicken"
-Action: Use 'search_recipes' with query "dinner ideas with chicken"
-Response: [Show FULL tool output] + "Would you like to cook one of these, or see more options?"
+```json
+{{
+  "action": "search_recipes",
+  "action_input": {{"query": "dinner ideas with chicken"}}
+}}
+```
+Observation: [Tool returns full recipes with markdown formatting]
+Thought: I received the recipes, now I must show them to user with Final Answer
+Action:
+```json
+{{
+  "action": "Final Answer",
+  "action_input": "[COMPLETE OBSERVATION TEXT] Would you like to cook one of these, or see more options?"
+}}
+```
 
 Example 2 - Recipe Selection:
 User: "I'll cook recipe 2"
-Action: Use 'save_recipe' with recipe_number=2
-Response: "Recipe saved! Enjoy cooking!"
+Thought: User selected recipe number 2, I must save it
+Action:
+```json
+{{
+  "action": "save_recipe",
+  "action_input": {{"recipe_number": 2}}
+}}
+```
+Observation: Recipe saved successfully...
+Thought: Recipe was saved, confirm to user
+Action:
+```json
+{{
+  "action": "Final Answer",
+  "action_input": "✅ Recipe saved! Enjoy cooking!"
+}}
+```
 
 Example 3 - General Question:
 User: "What's the difference between protein and carbs?"
-Action: No tool needed
-Response: [Direct answer]
+Thought: This is a general nutrition question, no tool needed
+Action:
+```json
+{{
+  "action": "Final Answer",
+  "action_input": "Protein is essential for building muscles and repairing tissue, found in meat, fish, eggs, and legumes. Carbohydrates provide energy, found in grains, fruits, and vegetables. Both are important macronutrients with different roles."
+}}
+```
 
-CRITICAL: 
-- Always show the COMPLETE recipe details from search_recipes
-- Parse recipe numbers from natural language (e.g., "second one" = recipe 2)"""
+CRITICAL RULES:
+- NEVER repeat the same tool call twice - if you already called it, move to Final Answer
+- NEVER summarize or modify the Observation from search_recipes - pass it through COMPLETELY
+- Use "Final Answer" after EVERY tool call (search_recipes AND save_recipe)
+- Parse recipe numbers from natural language (e.g., "second one" = recipe 2, "the first recipe" = recipe 1)
+- Always show the COMPLETE recipe details including ingredients, instructions, and nutrition facts
+- Be conversational and friendly in your responses"""
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_message),
@@ -398,7 +460,7 @@ CRITICAL:
         memory=memory,
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=2,
+        max_iterations=5,
         return_intermediate_steps=False,
     )
     
