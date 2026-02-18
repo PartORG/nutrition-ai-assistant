@@ -120,9 +120,9 @@ class UserDBHandler:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     health_condition TEXT,
                     medical_advice TEXT,
-                    limit TEXT,
+                    dietary_limit TEXT,
                     avoid TEXT,
-                    constraints TEXT,
+                    dietary_constraints TEXT,
                     created_at TEXT,
                     updated_at TEXT,
                     deleted_at TEXT,
@@ -182,7 +182,8 @@ class UserDBHandler:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
                     recipe_id INTEGER,
-                    restrictions TEXT,
+                    recipe_name TEXT,
+                    cook_instructions TEXT,
                     servings INTEGER,
                     ingredients TEXT,
                     prep_time TEXT,
@@ -324,10 +325,10 @@ class UserDBHandler:
                 advice.medical_advice = "\n".join(advice.medical_advice)
             cursor = conn.execute(
                 """INSERT INTO medical_advice
-                   (health_condition, medical_advice, limit, avoid, constraints, created_at, updated_at, deleted_at, user_id)
+                   (health_condition, medical_advice, dietary_limit, avoid, dietary_constraints, created_at, updated_at, deleted_at, user_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (advice.health_condition, advice.medical_advice,
-                 advice.limit, advice.avoid, advice.constraints,
+                 advice.dietary_limit, advice.avoid, advice.dietary_constraints,
                  advice.created_at, advice.updated_at, advice.deleted_at, advice.user_id),
             )
             return cursor.lastrowid
@@ -610,13 +611,13 @@ class UserDBHandler:
 
         Args:
             history_id: The row ID of the recipe history record.
-            field:      Column name. Must be one of: restrictions, servings, ingredients, prep_time.
+            field:      Column name. Must be one of: cook_instructions, servings, ingredients, prep_time, recipe_name.
             new_value:  The new value.
 
         Raises:
             ValueError: If field is not in the allowed set.
         """
-        allowed_fields = {"restrictions", "servings", "ingredients", "prep_time"}
+        allowed_fields = {"cook_instructions", "servings", "ingredients", "prep_time", "recipe_name"}
         if field not in allowed_fields:
             raise ValueError(f"Invalid field '{field}'. Allowed: {allowed_fields}")
 
