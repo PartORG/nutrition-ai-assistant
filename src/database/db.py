@@ -16,7 +16,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Generator, List, Optional
 
-from database.models import (
+from src.database.models import (
     User,
     MedicalAdvice,
     Authentication,

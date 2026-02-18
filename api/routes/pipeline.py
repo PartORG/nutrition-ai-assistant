@@ -12,7 +12,7 @@ db_handler = UserDBHandler()
 # JWT Configuration
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -113,4 +113,28 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 @router.get("/users/me")
 async def read_users_me(current_user: dict = Depends(get_current_user)):
     return current_user
+
+@router.get("/nutrition_history")
+async def get_nutrition_history(current_user: dict = Depends(get_current_user)):
+    """
+    Retrieve nutrition history for the current user.
+
+    Returns:
+        List[dict]: A list of nutrition history records.
+    """
+    user_id = current_user["user_id"]
+    nutrition_history = db_handler.read_nutrition_history_by_user(user_id)
+    return nutrition_history
+
+@router.get("/recipe_history")
+async def get_recipe_history(current_user: dict = Depends(get_current_user)):
+    """
+    Retrieve recipe history for the current user.
+
+    Returns:
+        List[dict]: A list of recipe history records.
+    """
+    user_id = current_user["user_id"]
+    recipe_history = db_handler.read_recipe_history_by_user(user_id)
+    return recipe_history
 
