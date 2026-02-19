@@ -74,18 +74,20 @@ YOLO is used for robust object detection in real time.
 
 - Dataset: Food101 (from PyTorch torchvision)
 
-- Fine-tuned on a subset of the dataset (CPU-based training)
+- First model "food101_model.pth" was fine-tuned on a subset of the dataset (20000 data, 5 epochs, CPU-based training). 
 
-- Output: Food class prediction (101 categories)
+- Final model "food101_resnet18_best.pth" was fine-tuned on the whole training set (GPU-based training via Google Colab, 15 epochs). The model was trained on the full Food101 training split (75,750 images, ~75% of the dataset) and evaluated on the official test split (25,250 images). 
+
+- Output: Food class prediction (101 categories). 
+
+- After a total of 15 epochs: Train Acc: 0.6767 | Test Acc: 0.7612
 
 - Food101 documentation:
 https://docs.pytorch.org/vision/0.19/generated/torchvision.datasets.Food101.html
 
 
-The classifier was trained using transfer learning and saved as: food101_model.pth
 
-
-# 4. Final Integrated Vision Pipeline
+# 4. Final Integrated Vision Pipeline Class
 
 The final production-ready pipeline follows this structure:
 

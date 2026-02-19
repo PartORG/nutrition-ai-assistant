@@ -11,7 +11,7 @@ from collections import Counter     # for counting food classes in description a
 
 # 1. Device
 
-device = torch.device("cpu")
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 # 2. Load YOLO
@@ -23,7 +23,7 @@ yolo_model = YOLO("src/cnn/models_cnn/yolov8n.pt")
 
 food_model = models.resnet18(weights=None)
 food_model.fc = torch.nn.Linear(food_model.fc.in_features, 101)
-food_model.load_state_dict(torch.load("src/cnn/models_cnn/food101_model.pth", map_location=device, weights_only=True))
+food_model.load_state_dict(torch.load("src/cnn/models_cnn/food101_resnet18_best.pth", map_location=device, weights_only=True))
 food_model.to(device)
 food_model.eval()
 
@@ -40,16 +40,16 @@ transform = transforms.Compose([
 # 5. Filters (FIX)
 
 FOOD_OBJECTS = {
-    "banana", "apple", "orange", "pizza", "cake", "donut", "hot dog", "sandwich"
+    "banana", "apple", "orange", "pizza", "cake", "donut", "hot dog", "sandwich", "broccoli", "carrot"
 }
-CONF_THRESHOLD = 0.5  # in order to skip low-confidence detections
+CONF_THRESHOLD = 0.6  # in order to skip low-confidence detections
 
 
 # 6. Capture Image
 
 cap = cv2.VideoCapture(0)
 
-print("Press SPACE to capture image...")
+print("Press SPACE to capture image, ESC to quit...")
 
 while True:
     ret, frame = cap.read()
