@@ -84,6 +84,7 @@ class MedicalAdviceOut(BaseModel):
     medical_advice: str
     dietary_limit: str
     avoid: str
+    dietary_constraints: str = ""
 
 
 # --- Image ---

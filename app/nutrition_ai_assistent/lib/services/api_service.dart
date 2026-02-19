@@ -11,13 +11,18 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// Base HTTP client.  Change [baseUrl] to match your server.
+/// Base HTTP client. The API URL is set at compile time via --dart-define.
 ///
-/// Android emulator  → http://10.0.2.2:8000
-/// iOS simulator / desktop → http://localhost:8000
-/// Physical device → `http://<your-machine-LAN-ip>:8000`
+/// Usage:
+///   flutter run                                               → http://localhost:8000 (default)
+///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000   → Android emulator
+///   flutter run --dart-define=API_BASE_URL=http://192.168.1.x:8000 → Physical device (LAN IP)
+///   flutter run --dart-define=API_BASE_URL=https://api.myapp.com   → Production
 class ApiService {
-  static const String baseUrl = 'http://localhost:8000';
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://127.0.0.1:8000',
+  );
 
   final StorageService _storage;
 

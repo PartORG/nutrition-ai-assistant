@@ -1,0 +1,53 @@
+# Exclude heavy / irrelevant paths from Docker build context
+
+# Version control
+.git/
+.github/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Large data directories — mounted as volumes in docker-compose
+data/
+data_test/
+vector_databases/
+
+# Databases — mounted as volumes
+*.db
+*.db-journal
+*.sqlite3
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Flutter app — not needed in API container
+app/
+
+# Experimental scripts — not deployed
+new_scripts/
+
+# Services have their own build context
+services/
+
+# Dev-only requirements (API container uses requirements.txt)
+requirements-dev.txt
+
+# Logs
+*.log
+
+# Environment files (injected at runtime)
+.env

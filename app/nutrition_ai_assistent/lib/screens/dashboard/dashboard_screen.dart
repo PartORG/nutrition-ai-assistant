@@ -123,6 +123,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 16),
             _buildStatsRow(context),
             const SizedBox(height: 16),
+            _buildGoalsRow(context),
+            const SizedBox(height: 16),
             if (_nutritionTotal != null) ...[
               _buildNutritionCard(context, _nutritionTotal!),
               const SizedBox(height: 16),
@@ -191,6 +193,154 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final saved = (_overview['saved_recipes'] as num?)?.toInt() ?? 0;
     return _StatCard(
       icon: Icons.restaurant_menu, label: 'Saved Recipes', value: '$saved',
+    );
+  }
+
+  // ─── Goals row (Dietary Goals + My Meals) ─────────────────────────────────
+  Widget _buildGoalsRow(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 3, child: _buildDietaryGoalsCard(context)),
+          const SizedBox(width: 12),
+          Expanded(flex: 2, child: _buildMyMealsCard(context)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDietaryGoalsCard(BuildContext context) {
+    const sodiumMaxMg = 2300.0;
+    const carbsMaxG   = 300.0;
+    const proteinMinG = 50.0;
+
+    double wSodium = 0, wCarbs = 0, wProtein = 0;
+    int daysWithData = 0;
+    for (final day in _nutritionDaily) {
+      wSodium  += (day['sodium_mg']  as num?)?.toDouble() ?? 0;
+      wCarbs   += (day['carbs_g']    as num?)?.toDouble() ?? 0;
+      wProtein += (day['protein_g']  as num?)?.toDouble() ?? 0;
+      if (((day['calories'] as num?)?.toDouble() ?? 0) > 0) daysWithData++;
+    }
+    final totalDays = _nutritionDaily.isNotEmpty ? _nutritionDaily.length : 7;
+    final wAvg = [wSodium / totalDays, wCarbs / totalDays, wProtein / totalDays];
+    final dAvg = daysWithData > 0
+        ? [wSodium / daysWithData, wCarbs / daysWithData, wProtein / daysWithData]
+        : <double>[0, 0, 0];
+    final goals  = [sodiumMaxMg, carbsMaxG, proteinMinG];
+    final isMax  = [true, true, false];
+    final units  = ['mg', 'g', 'g'];
+    final labels = [('Sodium', '< 2300\nmg/day'), ('Carbs', '< 300\ng/day'), ('Protein', '> 50\ng/day')];
+
+    Widget valueCell(double val, double goal, bool maxGoal, String unit, bool hasData) {
+      if (!hasData) {
+        return Expanded(
+          child: Center(child: Text('—', style: const TextStyle(color: Colors.grey, fontSize: 12))),
+        );
+      }
+      final met = maxGoal ? val <= goal : val >= goal;
+      return Expanded(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '${val.toStringAsFixed(0)}$unit',
+              style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w600,
+                color: met ? AppColors.primaryDark : Colors.red.shade700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Icon(
+              met ? Icons.check_circle : Icons.cancel,
+              size: 13,
+              color: met ? Colors.green.shade600 : Colors.red.shade400,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Dietary Goals',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const SizedBox(width: 64),
+                ...labels.map((h) => Expanded(
+                  child: Column(
+                    children: [
+                      Text(h.$1, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text(h.$2, textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 8, color: Colors.grey, height: 1.3)),
+                    ],
+                  ),
+                )),
+              ],
+            ),
+            const Divider(height: 12),
+            Row(
+              children: [
+                const SizedBox(width: 64,
+                    child: Text('weekly\navg', style: TextStyle(fontSize: 9, color: Colors.grey))),
+                ...List.generate(3, (i) =>
+                    valueCell(wAvg[i], goals[i], isMax[i], units[i], _nutritionDaily.isNotEmpty)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(width: 64,
+                    child: Text('daily\navg', style: TextStyle(fontSize: 9, color: Colors.grey))),
+                ...List.generate(3, (i) =>
+                    valueCell(dAvg[i], goals[i], isMax[i], units[i], daysWithData > 0)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMyMealsCard(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('My Meals',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(
+                  'Add information on consumed meals this week',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
+                const SizedBox(width: 4),
+                const Text('edit',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

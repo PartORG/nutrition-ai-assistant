@@ -1,1 +1,64 @@
-# Pinned production dependencies
+# Production dependencies for the FastAPI backend (Docker container).
+# Excludes dev-only tools: pytest, jupyterlab, black, mlflow, streamlit, etc.
+#
+# pydantic is set to >=2.7.4 — required by langchain==0.3.14
+# (requirements-dev.txt pins 2.5.0 which works locally but fails pip resolution from scratch)
+
+# ── Core API ────────────────────────────────────────────────
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic>=2.7.4,<3.0.0
+python-multipart>=0.0.9
+python-dotenv==1.0.1
+
+# ── Auth ────────────────────────────────────────────────────
+bcrypt==3.2.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# ── Database ────────────────────────────────────────────────
+aiosqlite==0.22.1
+aiofiles==22.1.0
+
+# ── LangChain & RAG ─────────────────────────────────────────
+langchain==0.3.14
+langchain-core==0.3.29
+langchain-community==0.3.14
+langchain-text-splitters==0.3.4
+langchain-huggingface==0.1.2
+langchain-ollama==0.2.2
+langchain-groq==0.2.2
+langchain-openai==0.2.14
+langchainhub==0.1.21
+
+# ── LLM / Embeddings ────────────────────────────────────────
+ollama>=0.3.0
+transformers>=4.40.0
+sentence-transformers==3.3.1
+torch==2.5.1
+torchvision==0.20.1
+
+# ── Vector search ────────────────────────────────────────────
+faiss-cpu==1.9.0.post1
+rank_bm25==0.2.2
+
+# ── Document ingestion ───────────────────────────────────────
+pypdf==5.1.0
+unstructured==0.16.11
+openpyxl==3.1.5
+
+# ── HTTP ─────────────────────────────────────────────────────
+requests==2.31.0
+
+# ── Data ─────────────────────────────────────────────────────
+numpy==1.26.4
+pandas==2.2.2
+
+# ── Utilities ────────────────────────────────────────────────
+typing-extensions==4.12.2
+protobuf==4.25.3
+jsonschema==4.23.0
+rpds-py==0.19.1
+six==1.16.0
+rich==13.9.4
+typer==0.15.1

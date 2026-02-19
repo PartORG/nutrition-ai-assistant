@@ -8,6 +8,7 @@ the recommendation pipeline.
 from __future__ import annotations
 
 import re
+import logging
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +16,7 @@ from application.context import SessionContext
 from application.services.image_analysis import ImageAnalysisService
 from agent.tools.base import BaseTool, ToolResult
 
+logger = logging.getLogger(__name__)
 
 def _extract_user_text(original_query: str, image_path: str) -> str:
     """Strip image references from the original query to get the user's request.
@@ -99,18 +101,21 @@ class AnalyzeImageTool(BaseTool):
                 ctx, image_path, additional_query
             )
 
-            if result.recommendation:
-                safe_recipes = result.recommendation.safe_recipes
-                ingredients_str = ", ".join(result.detected.ingredients)
-                confidence_parts = [
-                    f"{ing}: {result.detected.confidence_scores.get(ing, 0):.0%}"
-                    for ing in result.detected.ingredients[:5]
-                ]
-                header = (
-                    f"Detected ingredients: {ingredients_str}\n"
-                    f"Confidence: {', '.join(confidence_parts)}\n\n"
-                )
-                recipes_md = result.recommendation.safety_result.safe_recipes_markdown
+            ingredients_str = ", ".join(result.detected.ingredients)
+            confidence_parts = [
+                f"{ing}: {result.detected.confidence_scores.get(ing, 0):.0%}"
+                for ing in result.detected.ingredients[:5]
+            ]
+            header = (
+                f"Detected ingredients: {ingredients_str}\n"
+                f"Confidence: {', '.join(confidence_parts)}\n\n"
+            )
+
+            rec = result.recommendation
+            safe_recipes = rec.safe_recipes if rec else []
+
+            if safe_recipes:
+                recipes_md = rec.safety_result.safe_recipes_markdown
                 footer = (
                     f"\n\n---\n"
                     f"Found {len(safe_recipes)} recipes using your ingredients!\n"
@@ -118,13 +123,41 @@ class AnalyzeImageTool(BaseTool):
                 )
                 return ToolResult(
                     output=header + recipes_md + footer,
-                    data=result.recommendation,
+                    data=rec,
                     store_as="last_recommendations",
+                )
+            elif rec is not None:
+                # Pipeline ran but safety filter rejected everything — explain why
+                summary = rec.summary
+                logger.warning(
+                    "All recipes rejected by safety filter for user %d. Summary: %s",
+                    ctx.user_id, summary,
+                )
+                rejected = rec.safety_result.filtered_out
+                reasons = "; ".join(
+                    f"{r.recipe_name}: {r.issues[0].description}"
+                    for r in rejected[:3]
+                    if r.issues
+                )
+                output = (
+                    header
+                    + "Detected your ingredients but all suggested recipes were filtered "
+                    "out by your dietary safety constraints.\n\n"
+                )
+                if reasons:
+                    output += f"Reasons: {reasons}\n\n"
+                output += (
+                    "Try asking me directly — e.g. "
+                    "\"suggest a light dinner with tomatoes and eggs\"."
+                )
+                return ToolResult(
+                    output=output,
+                    data=result.detected,
+                    store_as="detected_ingredients",
                 )
             else:
                 return ToolResult(
-                    output=f"Detected ingredients: {', '.join(result.detected.ingredients)}\n"
-                           f"Could not find matching recipes. Try adding more details.",
+                    output=f"{header}Could not find matching recipes. Try adding more details.",
                     data=result.detected,
                     store_as="detected_ingredients",
                 )

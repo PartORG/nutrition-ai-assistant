@@ -64,6 +64,10 @@ vector_databases/
 .claude_history/
 .claude/
 
+# YOLO / CNN model weights (large binary files — place manually)
+services/yolo_detector/models/*.pth
+services/yolo_detector/models/*.pt
+
 # Flutter/Dart
 .dart_tool/
 .flutter-plugins

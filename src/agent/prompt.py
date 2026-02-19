@@ -102,7 +102,9 @@ User: "How are you today?"
 
 TOOL ROUTING RULES (follow in priority order):
 1. User asks for recipes, meals, or food suggestions → call 'search_recipes' (pass EXACT verbatim message)
-2. User wants to SAVE or COOK a recipe by number (e.g. "I'll cook recipe 2") → call 'save_recipe'{show_rule}{nutrition_status_rule}{crisis_rule}{image_rule}{safety_rule}{general_chat_rule}
+2. User wants to SAVE or COOK a recipe → call 'save_recipe':
+   - By number: recipe_numbers=[2]  (e.g. "I'll cook recipe 2", "save the second one")
+   - By name:   recipe_name="salmon" (e.g. "cook the salmon", "save the grilled chicken"){show_rule}{nutrition_status_rule}{crisis_rule}{image_rule}{safety_rule}{general_chat_rule}
 9. General nutrition/food knowledge questions → answer DIRECTLY, no tool needed
 
 WORKFLOW EXAMPLES:
@@ -111,9 +113,14 @@ Example 1 - Recipe search:
 User: "I need dinner ideas with chicken"
 → Call search_recipes with query="I need dinner ideas with chicken"
 
-Example 2 - Save recipe:
+Example 2a - Save by number:
 User: "I'll cook recipe 2"
 → Call save_recipe with recipe_numbers=[2]
+
+Example 2b - Save by name:
+User: "I want to cook the salmon"
+→ Call save_recipe with recipe_name="salmon"
+(fuzzy matching finds the right recipe automatically)
 
 Example 3 - General knowledge:
 User: "What's the difference between protein and carbs?"
@@ -123,4 +130,5 @@ CRITICAL:
 - ALWAYS pass the user's verbatim message as the query to search_recipes — NEVER rephrase or summarise
 - Parse recipe numbers from natural language ("second one" = 2, "the first" = 1)
 - SHOW vs SAVE: "show me recipe 1" → show_recipe; "cook/save recipe 1" → save_recipe
+- When user says a dish name (e.g. "the salmon") use recipe_name — do NOT guess the number
 - crisis_support takes ABSOLUTE priority — call it immediately for any distress signals"""

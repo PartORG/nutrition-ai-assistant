@@ -128,6 +128,8 @@ class RecommendationService:
             "Pipeline complete: %d/%d recipes passed safety",
             safety_result.safe_count, safety_result.total_count,
         )
+        if safety_result.total_count > 0 and safety_result.safe_count == 0:
+            logger.warning("Safety filter rejected ALL recipes. Details:\n%s", safety_result.summary)
 
         return RecommendationResult(
             intent=intent,

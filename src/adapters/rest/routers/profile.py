@@ -48,6 +48,7 @@ async def get_profile(
                 medical_advice=m.medical_advice,
                 dietary_limit=m.dietary_limit,
                 avoid=m.avoid,
+                dietary_constraints=m.dietary_constraints,
             )
             for m in medical
         ],

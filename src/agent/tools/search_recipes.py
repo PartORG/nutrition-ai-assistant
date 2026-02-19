@@ -13,6 +13,13 @@ from application.context import SessionContext
 from application.services.recommendation import RecommendationService
 from agent.tools.base import BaseTool, ToolResult
 
+_MEDICAL_DISCLAIMER = (
+    "\n\n> ⚠️ **Medical disclaimer:** These are general nutritional recommendations "
+    "based on available data. Always consult a healthcare provider or registered "
+    "dietitian before making significant dietary changes, especially if you have "
+    "a medical condition."
+)
+
 
 class SearchRecipesInput(BaseModel):
     """Input schema for the search_recipes tool."""
@@ -57,9 +64,11 @@ class SearchRecipesTool(BaseTool):
                 f"\n\n---\n"
                 f"Found {len(safe_recipes)} recipes above!\n\n"
                 f"What would you like to do?\n"
-                f"- Cook one? (e.g., 'I'll cook recipe 2')\n"
+                f"- Cook one? (e.g., 'I'll cook recipe 2' or 'save the salmon')\n"
+                f"- See full details? (e.g., 'show me recipe 1')\n"
                 f"- Need more options? (e.g., 'Show me more vegetarian recipes')\n"
                 f"- Have questions? Just ask!"
+                + _MEDICAL_DISCLAIMER
             )
         else:
             footer = (

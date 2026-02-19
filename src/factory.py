@@ -46,7 +46,9 @@ from infrastructure.llm.intent_parser import OllamaIntentParser
 from infrastructure.llm.safety_filter import OllamaSafetyFilter
 from infrastructure.rag.medical_rag import MedicalRAG
 from infrastructure.rag.recipe_rag import RecipeNutritionRAG
-from infrastructure.cnn.ingredient_detector import CNNIngredientDetector
+from infrastructure.cnn.ingredient_detector import LLaVAIngredientDetector
+from infrastructure.cnn.yolo_service_detector import YOLOServiceDetector
+from infrastructure.cnn.fallback_detector import FallbackIngredientDetector
 from application.context import SessionContext
 from application.services.recommendation import RecommendationService
 from application.services.recipe_manager import RecipeManagerService
@@ -162,21 +164,39 @@ class ServiceFactory:
         )
 
     def create_image_analysis_service(self) -> ImageAnalysisService:
-        """Create an ImageAnalysisService with LLaVA ingredient detector via Ollama."""
-        rec_service = self.create_recommendation_service()
+        """Create an ImageAnalysisService with the configured ingredient detector.
 
-        # cnn_model_path is repurposed as llava model name (e.g. "llava:13b").
-        # Defaults to "llava" if not set.
+        Detector selection via CNN_DETECTOR_TYPE env var:
+          "yolo_with_fallback" (default) - tries YOLO microservice, falls back to LLaVA
+          "yolo_only"                     - YOLO microservice only
+          "llava_only"                    - LLaVA via Ollama only
+        """
+        rec_service = self.create_recommendation_service()
+        detector_type = self._config.cnn_detector_type
         llava_model = self._config.cnn_model_path or "llava"
 
-        detector = CNNIngredientDetector(
-            ollama_base_url=self._config.ollama_base_url,
-            model=llava_model,
-        )
-        logger.info(
-            "Image analysis: LLaVA model '%s' at %s",
-            llava_model, self._config.ollama_base_url,
-        )
+        if detector_type == "llava_only":
+            detector = LLaVAIngredientDetector(
+                ollama_base_url=self._config.ollama_base_url,
+                model=llava_model,
+            )
+            logger.info("Image detector: LLaVA ('%s') at %s", llava_model, self._config.ollama_base_url)
+
+        elif detector_type == "yolo_only":
+            detector = YOLOServiceDetector(service_url=self._config.yolo_service_url)
+            logger.info("Image detector: YOLO-only at %s", self._config.yolo_service_url)
+
+        else:  # "yolo_with_fallback" (default)
+            yolo = YOLOServiceDetector(service_url=self._config.yolo_service_url)
+            llava = LLaVAIngredientDetector(
+                ollama_base_url=self._config.ollama_base_url,
+                model=llava_model,
+            )
+            detector = FallbackIngredientDetector(primary=yolo, fallback=llava)
+            logger.info(
+                "Image detector: YOLO (%s) with LLaVA fallback",
+                self._config.yolo_service_url,
+            )
 
         return ImageAnalysisService(
             detector=detector,
@@ -254,6 +274,7 @@ class ServiceFactory:
                 chat_history_service=chat_history_service,
             ),
             system_prompt=system_prompt,
+            max_iterations=self._config.agent_max_iterations,
             chat_history_service=chat_history_service,
         )
 
