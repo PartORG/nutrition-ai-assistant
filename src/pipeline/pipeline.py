@@ -122,7 +122,7 @@ class RAGPipeline:
         if not is_new:
             print("[PIPELINE] Bypassing Medical RAG. Fetching existing advice...")
             # TODO: update db function to get new columns too
-            db_advice = self.db_handler.get_medical_advice_by_user(2) #TODO: change to user_id again
+            db_advice = self.db_handler.get_medical_advice_by_user(1) #TODO: change to user_id again
 
             if db_advice:
                 # TODO: store constraints, avoid and limit (from Medical RAG) in the medical_advice table.
@@ -145,7 +145,7 @@ class RAGPipeline:
             advice = MedicalAdvice(
                 health_condition=intent.health_condition or "",
                 medical_advice=advice_text,
-                user_id=2, # TODO: change to user_id again
+                user_id=1, # TODO: change to user_id again
                 dietary_limit=str(constraints.get("limit", {})),
                 dietary_constraints=str(constraints.get("constraints", {})),
                 avoid=str(constraints.get("avoid", [])),
@@ -157,14 +157,14 @@ class RAGPipeline:
         llm_rec = self._step_get_recommendation(augmented_q)
 
         # Step 5: Safety filter
-        safety_result = self._step_safety_check(llm_rec, constraints, intent)
+        # safety_result = self._step_safety_check(llm_rec, constraints, intent)
 
         return PipelineResult(
             intent=intent,
             constraints=constraints,
             augmented_query=augmented_q,
             llm_recommendation=llm_rec,
-            safety_result=safety_result,
+            safety_result=llm_rec # TODO: change to safety_result after testing
         )
 
     # ------------------------------------------------------------------
@@ -229,7 +229,7 @@ class RAGPipeline:
     def _step_update_user(self, user_id: int, intent: UserIntent):
         """Save the user's current profile as a new UserProfileHistory snapshot."""
         print(f"[DB] Saving profile snapshot for user ID {user_id}...")
-        print(f"  -> Preferences: {intent.ingredients_list}")
+        print(f"  -> Preferences: {intent.preferences}")
         print(f"  -> Restrictions: {intent.restrictions_list}")
         print(f"  -> Health conditions: {intent.health_condition}")
 
@@ -238,7 +238,7 @@ class RAGPipeline:
             health = ", ".join(health)
 
         profile = UserProfileHistory(
-            preferences=", ".join(intent.ingredients_list),
+            preferences=", ".join(intent.preferences),
             user_id=user_id,
             health_condition=health,
             restrictions=", ".join(intent.restrictions_list),
@@ -299,9 +299,6 @@ class RAGPipeline:
         limit = constraints.get("limit", [])
         sections.append("FOODS TO LIMIT:\n" + ("\n".join("- " + f for f in limit) if limit else "- None"))
 
-        if intent.ingredients_list:
-            sections.append("DESIRED INGREDIENTS:\n- " + "\n- ".join(intent.ingredients_list))
-
         if intent.instructions:
             sections.append("INSTRUCTIONS:\n- " + "\n- ".join(intent.instructions.split(",")))
 
@@ -320,6 +317,11 @@ class RAGPipeline:
     def _step_safety_check(self, llm_rec: str, constraints: Dict, intent: UserIntent) -> SafetyCheckResult:
         """Validate recipe output against user constraints using the safety filter."""
         print("\n[Step 5] Safety Check — validating recipes against constraints...")
+        
+        if self.safety_filter is None:
+            print("  -> Safety filter is disabled. Skipping safety check.")
+            return llm_rec
+
         safety_result = self.safety_filter.check(
             recipe_markdown=llm_rec,
             medical_constraints=constraints,

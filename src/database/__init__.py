@@ -5,7 +5,7 @@ Provides dataclass models for all 6 tables and the UserDBHandler
 class for SQLite CRUD operations.
 """
 
-from src.database.models import (
+from database.models import (
     User,
     MedicalAdvice,
     Authentication,
@@ -13,7 +13,7 @@ from src.database.models import (
     RecipeHistory,
     NutritionHistory,
 )
-from src.database.db import UserDBHandler
+from database.db import UserDBHandler
 
 __all__ = [
     "User",

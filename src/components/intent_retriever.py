@@ -90,15 +90,6 @@ class UserIntent:
         return [c.strip() for c in self.health_condition.split(",") if c.strip()]
 
     @property
-    def ingredients_list(self) -> List[str]:
-        """Extract ingredient names from preferences string.
-
-        Splits the comma-separated preferences string and strips whitespace.
-        Example: "Italian food, quick cooking, tofu" -> ["Italian food", "quick cooking", "tofu"]
-        """
-        return [p.strip() for p in self.preferences.split(",") if p.strip()]
-
-    @property
     def restrictions_list(self) -> List[str]:
         """Return restrictions as a list for pipeline processing.
 
