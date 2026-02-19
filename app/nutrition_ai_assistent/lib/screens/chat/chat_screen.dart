@@ -29,6 +29,12 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _connected = false;
   bool _connecting = false;
   bool _waitingForResponse = false;
+  bool _historyLoaded = false;
+  bool _uploadingImage = false;
+
+  // Server path of an uploaded image waiting to be sent with the next message
+  String? _pendingImagePath;
+  String? _pendingImageName;
 
   final List<ChatMessage> _messages = [
     ChatMessage(
@@ -71,6 +77,10 @@ class _ChatScreenState extends State<ChatScreen> {
         },
       );
       if (mounted) setState(() => _connected = true);
+      if (!_historyLoaded) {
+        _historyLoaded = true;
+        await _loadHistory();
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -85,21 +95,69 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _loadHistory() async {
+    try {
+      final data = await AppServices.instance.api.get('/chat/history?hours=24');
+      final rawMessages = data['messages'] as List<dynamic>? ?? [];
+      if (!mounted || rawMessages.isEmpty) return;
+
+      final history = rawMessages.map((m) => ChatMessage(
+        text: (m['content'] as String?) ?? '',
+        isUser: (m['role'] as String?) == 'user',
+      )).toList();
+
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(history);
+      });
+      _scrollToBottom();
+    } catch (_) {
+      // Best-effort — silently ignore if history is unavailable
+    }
+  }
+
   void _sendMessage() {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    final hasPendingImage = _pendingImagePath != null;
+
+    if (text.isEmpty && !hasPendingImage) return;
     if (!_connected) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Not connected. Tap the reconnect button.')),
       );
       return;
     }
+
+    final String wsMessage;
+    final String displayText;
+    final String? displayImagePath;
+
+    if (hasPendingImage) {
+      // Combine user text + image reference for the backend agent
+      wsMessage = text.isNotEmpty
+          ? '$text\n[IMAGE:$_pendingImagePath]'
+          : '[IMAGE:$_pendingImagePath]';
+      displayText = text.isNotEmpty ? text : '📷 ${_pendingImageName ?? 'Photo'}';
+      displayImagePath = _pendingImagePath;
+    } else {
+      wsMessage = text;
+      displayText = text;
+      displayImagePath = null;
+    }
+
     setState(() {
-      _messages.add(ChatMessage(text: text, isUser: true));
+      _messages.add(ChatMessage(
+        text: displayText,
+        isUser: true,
+        imagePath: displayImagePath,
+      ));
       _messageController.clear();
+      _pendingImagePath = null;
+      _pendingImageName = null;
       _waitingForResponse = true;
     });
-    AppServices.instance.chat.send(text);
+    AppServices.instance.chat.send(wsMessage);
     _scrollToBottom();
   }
 
@@ -187,32 +245,25 @@ class _ChatScreenState extends State<ChatScreen> {
     final XFile? image = await ImagePicker().pickImage(source: source);
     if (image == null || !_connected) return;
 
-    setState(() {
-      _messages.add(ChatMessage(
-        text: 'Uploading image...',
-        isUser: true,
-        imagePath: image.path,
-      ));
-      _waitingForResponse = true;
-    });
-    _scrollToBottom();
+    setState(() => _uploadingImage = true);
 
     try {
-      // Read bytes first — XFile.readAsBytes() works on all platforms including Web.
-      // (http.MultipartFile.fromPath uses dart:io which is unavailable in browsers)
       final bytes = await image.readAsBytes();
       final serverPath = await AppServices.instance.api.uploadImageBytes(
         bytes,
         image.name,
       );
-      // Send the server path through WebSocket so the agent can open it
-      AppServices.instance.chat.send(
-        'Please analyze the food in this image: $serverPath',
-      );
+      if (!mounted) return;
+      // Stage the image — let the user type a message before sending
+      setState(() {
+        _uploadingImage = false;
+        _pendingImagePath = serverPath;
+        _pendingImageName = image.name;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _waitingForResponse = false;
+        _uploadingImage = false;
         _messages.add(ChatMessage(
           text: 'Could not upload image: $e',
           isUser: false,
@@ -274,41 +325,114 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: SafeArea(
             top: false,
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  onPressed: _showImageOptions,
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  color: AppColors.primary,
-                  tooltip: 'Add photo',
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    enabled: !_waitingForResponse,
-                    decoration: InputDecoration(
-                      hintText: 'Ask about nutrition...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.cardGreen,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                // ── Upload progress indicator ──────────────────────────────
+                if (_uploadingImage)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Uploading photo…',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
                     ),
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _sendMessage(),
                   ),
-                ),
-                const SizedBox(width: 4),
-                CircleAvatar(
-                  backgroundColor: (_connected && !_waitingForResponse)
-                      ? AppColors.primary
-                      : Colors.grey,
-                  child: IconButton(
-                    onPressed: (_connected && !_waitingForResponse) ? _sendMessage : null,
-                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
+
+                // ── Pending image chip ─────────────────────────────────────
+                if (_pendingImagePath != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.cardGreen,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.image_outlined,
+                                  size: 16, color: AppColors.primary),
+                              const SizedBox(width: 6),
+                              Text(
+                                _pendingImageName ?? 'Photo attached',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.primaryDark,
+                                    fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _pendingImagePath = null;
+                            _pendingImageName = null;
+                          }),
+                          child: const Icon(Icons.close, size: 16, color: Colors.grey),
+                        ),
+                      ],
+                    ),
                   ),
+
+                // ── Text field row ─────────────────────────────────────────
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: (_uploadingImage || _waitingForResponse)
+                          ? null
+                          : _showImageOptions,
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      color: AppColors.primary,
+                      tooltip: 'Add photo',
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        enabled: !_waitingForResponse && !_uploadingImage,
+                        decoration: InputDecoration(
+                          hintText: _pendingImagePath != null
+                              ? 'Add a message for this photo…'
+                              : 'Ask about nutrition…',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: AppColors.cardGreen,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                        ),
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    CircleAvatar(
+                      backgroundColor:
+                          (_connected && !_waitingForResponse && !_uploadingImage)
+                              ? AppColors.primary
+                              : Colors.grey,
+                      child: IconButton(
+                        onPressed: (_connected && !_waitingForResponse && !_uploadingImage)
+                            ? _sendMessage
+                            : null,
+                        icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

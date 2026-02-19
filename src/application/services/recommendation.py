@@ -33,6 +33,7 @@ from domain.ports import (
     RecipeRAGPort,
     SafetyFilterPort,
     MedicalRepository,
+    NutritionRepository,
 )
 from domain.exceptions import RAGError
 from application.context import SessionContext
@@ -55,12 +56,14 @@ class RecommendationService:
         recipe_rag: RecipeRAGPort,
         safety_filter: SafetyFilterPort,
         medical_repo: MedicalRepository,
+        nutrition_repo: NutritionRepository,
     ):
         self._intent_parser = intent_parser
         self._medical_rag = medical_rag
         self._recipe_rag = recipe_rag
         self._safety_filter = safety_filter
         self._medical_repo = medical_repo
+        self._nutrition_repo = nutrition_repo
 
     async def get_recommendations(
         self,
@@ -85,7 +88,7 @@ class RecommendationService:
         intent = await self._parse_intent(query)
         logger.debug("Intent parsed: %s", intent)
 
-        # Step 2: Get medical constraints
+        # Step 2: Get medical constraints (DB-first, then Medical RAG)
         constraints = await self._get_constraints(ctx, intent)
         logger.debug(
             "Constraints: avoid=%s, limits=%s",
@@ -93,17 +96,33 @@ class RecommendationService:
             list(constraints.constraints.keys()),
         )
 
-        # Step 3: Build augmented query
-        augmented = self._build_augmented_query(query, intent, constraints)
+        # Step 2.5: Adjust constraints for today's already-consumed nutrition.
+        # The limits in medical_advice are DAILY totals (e.g. sugar_g=50g/day).
+        # We subtract what the user has already eaten today so that recipe
+        # recommendations and safety checks are based on the REMAINING budget,
+        # not the full daily limit.
+        daily_totals = await self._get_daily_totals(ctx.user_id)
+        adjusted_constraints = _adjust_for_daily_budget(constraints, daily_totals)
+        if daily_totals:
+            logger.info(
+                "Daily totals for user %d: %s",
+                ctx.user_id,
+                {k: round(v, 1) for k, v in daily_totals.items() if v > 0},
+            )
+
+        # Step 3: Build augmented query (includes remaining daily budget)
+        augmented = self._build_augmented_query(
+            query, intent, adjusted_constraints, daily_totals,
+        )
         logger.debug("Augmented query built (%d chars)", len(augmented))
 
         # Step 4: Retrieve recipes
         raw_recommendations = await self._retrieve_recipes(augmented)
         logger.debug("Recommendations received")
 
-        # Step 5: Safety check (mandatory — not optional, not a tool call)
+        # Step 5: Safety check against REMAINING daily budget
         safety_result = await self._safety_check(
-            raw_recommendations, constraints, intent,
+            raw_recommendations, adjusted_constraints, intent,
         )
         logger.info(
             "Pipeline complete: %d/%d recipes passed safety",
@@ -112,7 +131,7 @@ class RecommendationService:
 
         return RecommendationResult(
             intent=intent,
-            constraints=constraints,
+            constraints=adjusted_constraints,
             augmented_query=augmented,
             raw_recommendations=raw_recommendations,
             safety_result=safety_result,
@@ -235,6 +254,42 @@ class RecommendationService:
         except Exception:
             logger.exception("Failed to save medical advice — continuing without save")
 
+    async def _get_daily_totals(self, user_id: int) -> dict[str, float]:
+        """Step 2.5: Sum today's already-consumed nutrition for the user.
+
+        Returns a dict mapping constraint key names to total amounts consumed
+        so far today.  Returns an empty dict if no meals were saved today or
+        if the query fails.
+        """
+        try:
+            records = await self._nutrition_repo.get_today_by_user(user_id)
+        except Exception:
+            logger.exception("Failed to load today's nutrition — skipping budget adjustment")
+            return {}
+
+        if not records:
+            return {}
+
+        totals: dict[str, float] = {
+            "calories": 0.0,
+            "protein_g": 0.0,
+            "fat_g": 0.0,
+            "carbs_g": 0.0,
+            "fiber_g": 0.0,
+            "sugar_g": 0.0,
+            "sodium_mg": 0.0,
+        }
+        for r in records:
+            totals["calories"] += r.calories or 0.0
+            totals["protein_g"] += r.protein or 0.0
+            totals["fat_g"] += r.fat or 0.0
+            totals["carbs_g"] += r.carbohydrates or 0.0
+            totals["fiber_g"] += r.fiber or 0.0
+            totals["sugar_g"] += r.sugar or 0.0
+            totals["sodium_mg"] += r.sodium or 0.0
+
+        return totals
+
     async def _retrieve_recipes(self, augmented_query: str) -> list[Recipe]:
         """Step 4: Send augmented query to Recipe RAG."""
         result = await self._recipe_rag.async_ask(augmented_query)
@@ -264,6 +319,7 @@ class RecommendationService:
         original_query: str,
         intent: UserIntent,
         constraints: NutritionConstraints,
+        daily_totals: Optional[dict] = None,
     ) -> str:
         """Build an enriched query for the Recipe/Nutrition RAG.
 
@@ -308,6 +364,13 @@ class RecommendationService:
                 "Dietary restrictions: " + ", ".join(intent.restrictions)
             )
 
+        # Free-text medical advice from the DB / Medical RAG (e.g. "should eat
+        # frequent small meals", "avoid high-GI foods").  Skip the generic
+        # fallback note that carries no real information.
+        _GENERIC_NOTE = "No specific medical conditions provided"
+        if constraints.notes and constraints.notes.strip() != _GENERIC_NOTE:
+            constraint_lines.append("Medical advice: " + constraints.notes.strip())
+
         # Numeric limits — only include non-empty ones
         rules = constraints.constraints
         limit_tokens: list[str] = []
@@ -342,12 +405,95 @@ class RecommendationService:
         if constraint_lines:
             parts.append("\n".join(constraint_lines))
 
+        # --- Part 3: Daily budget (remaining allowance) ------------------
+        # If the user has already eaten some meals today, show what has been
+        # consumed and what's left. This helps the Recipe RAG propose meals
+        # that fit within the remaining daily limits.
+        if daily_totals:
+            budget_lines: list[str] = []
+            consumed_tokens: list[str] = []
+            remaining_tokens: list[str] = []
+            rules = constraints.constraints  # already reduced by _adjust_for_daily_budget
+
+            for nutrient, label, unit in [
+                ("calories", "calories", "kcal"),
+                ("sugar_g", "sugar", "g"),
+                ("sodium_mg", "sodium", "mg"),
+                ("fiber_g", "fiber", "g"),
+                ("protein_g", "protein", "g"),
+            ]:
+                consumed = daily_totals.get(nutrient, 0.0)
+                if consumed <= 0:
+                    continue
+                consumed_tokens.append(f"{label} {consumed:.0f}{unit}")
+
+                rule = rules.get(nutrient) or {}
+                max_val = rule.get("max")
+                if max_val is not None:
+                    remaining_tokens.append(f"{label} {max_val:.0f}{unit} remaining")
+
+            if consumed_tokens:
+                budget_lines.append("Already consumed today: " + ", ".join(consumed_tokens))
+            if remaining_tokens:
+                budget_lines.append("Remaining daily budget: " + ", ".join(remaining_tokens))
+            if budget_lines:
+                budget_lines.insert(
+                    0,
+                    "IMPORTANT — the nutrient limits below reflect the user's "
+                    "REMAINING daily allowance after meals already eaten today:",
+                )
+                parts.append("\n".join(budget_lines))
+
         return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _adjust_for_daily_budget(
+    constraints: NutritionConstraints,
+    daily_totals: dict[str, float],
+) -> NutritionConstraints:
+    """Return a new NutritionConstraints where every max limit is reduced
+    by the amount the user has already consumed today.
+
+    The medical_advice table stores DAILY limits (e.g. sugar_g: 50 g/day).
+    If the user already ate a meal with 20 g of sugar, only 30 g remain for
+    new meals.  Clamped to 0 so the remaining budget is never negative.
+
+    daily_totals keys match constraint keys: 'sugar_g', 'sodium_mg',
+    'fiber_g', 'protein_g', 'calories', 'carbs_g', 'fat_g'.
+    """
+    if not daily_totals or not constraints.constraints:
+        return constraints
+
+    new_rules: dict = {}
+    changed = False
+    for nutrient, rule in constraints.constraints.items():
+        consumed = daily_totals.get(nutrient, 0.0)
+        max_val = rule.get("max")
+        min_val = rule.get("min")
+
+        if max_val is not None and consumed > 0:
+            remaining = max(0.0, max_val - consumed)
+            new_rules[nutrient] = {"max": round(remaining, 2), "min": min_val}
+            changed = True
+        else:
+            new_rules[nutrient] = rule
+
+    if not changed:
+        return constraints
+
+    return NutritionConstraints(
+        dietary_goals=constraints.dietary_goals,
+        foods_to_increase=constraints.foods_to_increase,
+        avoid=constraints.avoid,
+        limit=constraints.limit,
+        constraints=new_rules,
+        notes=constraints.notes,
+    )
+
 
 def _split_or_empty(value: Optional[str]) -> list[str]:
     """Split a comma/newline-separated string into a list, or return []."""

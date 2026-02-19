@@ -58,6 +58,11 @@ from agent.tools.registry import ToolRegistry
 from agent.tools.search_recipes import SearchRecipesTool
 from agent.tools.save_recipe import SaveRecipeTool
 from agent.tools.analyze_image import AnalyzeImageTool
+from agent.tools.show_recipe import ShowRecipeTool
+from agent.tools.general_chat import GeneralChatTool
+from agent.tools.nutrition_status import NutritionStatusTool
+from agent.tools.safety_guard import SafetyGuardTool
+from agent.tools.crisis_support import CrisisSupportTool
 from agent.memory import ConversationMemory
 from agent.prompt import build_system_prompt
 from agent.executor import AgentExecutor
@@ -139,6 +144,7 @@ class ServiceFactory:
                 ollama_base_url=self._config.ollama_base_url,
             ),
             medical_repo=SQLiteMedicalRepository(self._connection),
+            nutrition_repo=SQLiteNutritionRepository(self._connection),
         )
 
     def create_recipe_manager(self) -> RecipeManagerService:
@@ -222,10 +228,18 @@ class ServiceFactory:
         chat_history_service = self.create_chat_history_service()
 
         # Register tools
+        nutrition_repo = SQLiteNutritionRepository(self._connection)
+        medical_repo = SQLiteMedicalRepository(self._connection)
+
         registry = ToolRegistry()
         registry.register(SearchRecipesTool(rec_service))
         registry.register(SaveRecipeTool(recipe_manager))
+        registry.register(ShowRecipeTool())
         registry.register(AnalyzeImageTool(image_service))
+        registry.register(GeneralChatTool())
+        registry.register(NutritionStatusTool(nutrition_repo, medical_repo))
+        registry.register(SafetyGuardTool())
+        registry.register(CrisisSupportTool())
 
         # Build system prompt with registered tools
         system_prompt = build_system_prompt(registry)

@@ -17,10 +17,20 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = '';
   String _displayName = '';
 
+  /// Incremented every time the user navigates to the Dashboard tab so that
+  /// DashboardScreen knows it should reload its data.
+  final _dashboardRefresh = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
     _loadUserInfo();
+  }
+
+  @override
+  void dispose() {
+    _dashboardRefresh.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserInfo() async {
@@ -48,14 +58,13 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).pushReplacementNamed('/login');
   }
 
+  void _switchTab(int index) {
+    if (index == 0 && _currentIndex != 0) _dashboardRefresh.value++;
+    setState(() => _currentIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final screens = [
-      const DashboardScreen(),
-      const ChatScreen(),
-      const ProfileScreen(),
-    ];
-
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
@@ -75,17 +84,20 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIndex: _currentIndex,
         displayName: _displayName,
         username: _username,
-        onItemSelected: (index) {
-          setState(() => _currentIndex = index);
-        },
+        onItemSelected: _switchTab,
         onSignOut: _handleSignOut,
       ),
-      body: screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          DashboardScreen(refreshNotifier: _dashboardRefresh),
+          const ChatScreen(),
+          const ProfileScreen(),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-        },
+        onTap: _switchTab,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_outlined),

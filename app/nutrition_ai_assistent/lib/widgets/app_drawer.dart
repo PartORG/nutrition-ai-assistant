@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../screens/saved_recipes/saved_recipes_screen.dart';
+import '../screens/settings/settings_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   final int selectedIndex;
@@ -78,24 +80,15 @@ class AppDrawer extends StatelessWidget {
           ),
           const Divider(),
           _DrawerItem(
-            icon: Icons.history,
-            label: 'Meal History',
-            selected: false,
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Meal History coming soon!')),
-              );
-            },
-          ),
-          _DrawerItem(
             icon: Icons.bookmark_outline,
             label: 'Saved Recipes',
             selected: false,
             onTap: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Saved Recipes coming soon!')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const SavedRecipesScreen()),
               );
             },
           ),
@@ -105,8 +98,9 @@ class AppDrawer extends StatelessWidget {
             selected: false,
             onTap: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings coming soon!')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
               );
             },
           ),
@@ -118,21 +112,6 @@ class AppDrawer extends StatelessWidget {
             selected: false,
             color: AppColors.error,
             onTap: () { Navigator.pop(context); onSignOut(); },
-          ),
-          _DrawerItem(
-            icon: Icons.info_outline,
-            label: 'About NutriAI',
-            selected: false,
-            onTap: () {
-              Navigator.pop(context);
-              showAboutDialog(
-                context: context,
-                applicationName: 'NutriAI',
-                applicationVersion: '1.0.0',
-                applicationIcon: const Icon(Icons.eco, color: AppColors.primary, size: 40),
-                children: [const Text('Your Personal Nutrition AI Assistant')],
-              );
-            },
           ),
           const SizedBox(height: 8),
         ],

@@ -44,6 +44,20 @@ class SQLiteNutritionRepository:
             )
             return [self._row_to_history(r) for r in rows]
 
+    async def get_today_by_user(self, user_id: int) -> list[NutritionHistory]:
+        """Return all nutrition records saved today (local calendar date)."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        async with self._conn.acquire() as conn:
+            rows = await conn.execute_fetchall(
+                """SELECT * FROM nutrition_history
+                   WHERE user_id = ?
+                     AND (deleted_at = '' OR deleted_at IS NULL)
+                     AND created_at LIKE ?
+                   ORDER BY created_at DESC""",
+                (user_id, f"{today}%"),
+            )
+            return [self._row_to_history(r) for r in rows]
+
     async def soft_delete(self, history_id: int) -> None:
         async with self._conn.acquire() as conn:
             await conn.execute(

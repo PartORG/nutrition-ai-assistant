@@ -144,11 +144,18 @@ class AgentExecutor:
                     pass
             return error_output
 
-        # For recipe/image tools, return the tool observation verbatim.
-        # The LLM's "final answer" step tends to summarise or truncate the
-        # full recipe details — bypassing it guarantees the user sees every
-        # recipe with all ingredients, instructions and nutrition data.
-        _DIRECT_OUTPUT_TOOLS = {"search_recipes", "analyze_image"}
+        # For these tools, return the tool observation verbatim instead of
+        # letting the LLM rewrite or summarise it.
+        # - search_recipes / analyze_image: full recipe markdown must not be truncated
+        # - nutrition_status: structured table must reach the user unchanged
+        # - safety_guard / crisis_support: critical messages must not be softened
+        _DIRECT_OUTPUT_TOOLS = {
+            "search_recipes",
+            "analyze_image",
+            "nutrition_status",
+            "safety_guard",
+            "crisis_support",
+        }
         output = response.get("output", "I couldn't generate a response.")
         for action, observation in response.get("intermediate_steps", []):
             if getattr(action, "tool", "") in _DIRECT_OUTPUT_TOOLS:

@@ -65,6 +65,23 @@ class SQLiteChatMessageRepository:
                 (datetime.now().isoformat(), message_id),
             )
 
+    async def delete_old_for_user(self, user_id: int, cutoff_iso: str) -> int:
+        """Soft-delete all messages for a user created before *cutoff_iso*.
+
+        Returns the number of rows marked as deleted.
+        """
+        now = datetime.now().isoformat()
+        async with self._conn.acquire() as conn:
+            cursor = await conn.execute(
+                """UPDATE chat_messages
+                   SET deleted_at = ?
+                   WHERE user_id = ?
+                     AND (deleted_at = '' OR deleted_at IS NULL)
+                     AND created_at < ?""",
+                (now, user_id, cutoff_iso),
+            )
+            return cursor.rowcount
+
     @staticmethod
     def _row_to_entity(row) -> ChatMessage:
         return ChatMessage(

@@ -16,7 +16,9 @@ const _tips = [
 ];
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final ValueNotifier<int>? refreshNotifier;
+
+  const DashboardScreen({super.key, this.refreshNotifier});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -27,13 +29,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _error;
   String _username = '';
   Map<String, dynamic> _overview = {};
-  Map<String, dynamic>? _nutritionAvg;
+  Map<String, dynamic>? _nutritionTotal;
+  List<Map<String, dynamic>> _nutritionDaily = [];
   List<Map<String, dynamic>> _recentRecipes = [];
 
   @override
   void initState() {
     super.initState();
+    widget.refreshNotifier?.addListener(_loadData);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_loadData);
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -50,7 +60,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _username = name ?? username ?? 'there';
         _overview = data['overview'] as Map<String, dynamic>? ?? {};
-        _nutritionAvg = data['nutrition_avg'] as Map<String, dynamic>?;
+        _nutritionTotal = data['nutrition_total'] as Map<String, dynamic>?;
+        _nutritionDaily = List<Map<String, dynamic>>.from(
+          data['nutrition_daily'] as List? ?? [],
+        );
         _recentRecipes = List<Map<String, dynamic>>.from(
           data['recent_recipes'] as List? ?? [],
         );
@@ -110,8 +123,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 16),
             _buildStatsRow(context),
             const SizedBox(height: 16),
-            if (_nutritionAvg != null) ...[
-              _buildNutritionCard(context, _nutritionAvg!),
+            if (_nutritionTotal != null) ...[
+              _buildNutritionCard(context, _nutritionTotal!),
+              const SizedBox(height: 16),
+            ],
+            if (_nutritionDaily.isNotEmpty) ...[
+              _buildDailyChart(context),
               const SizedBox(height: 16),
             ],
             if (_recentRecipes.isNotEmpty) ...[
@@ -130,7 +147,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildGreetingCard(BuildContext context) {
     final firstName = _username.split(' ').first;
     final saved = (_overview['saved_recipes'] as num?)?.toInt() ?? 0;
-    final convs = (_overview['total_conversations'] as num?)?.toInt() ?? 0;
     return Card(
       color: AppColors.primary,
       child: Padding(
@@ -149,7 +165,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$convs chats · $saved recipes saved',
+                    '$saved recipes saved',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.white70,
                     ),
@@ -172,37 +188,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ─── Stats row ─────────────────────────────────────────────────────────────
   Widget _buildStatsRow(BuildContext context) {
-    final convs = (_overview['total_conversations'] as num?)?.toInt() ?? 0;
-    final msgs = (_overview['total_messages'] as num?)?.toInt() ?? 0;
     final saved = (_overview['saved_recipes'] as num?)?.toInt() ?? 0;
-    return Row(
-      children: [
-        Expanded(child: _StatCard(
-          icon: Icons.chat_bubble_outline, label: 'Chats', value: '$convs',
-        )),
-        const SizedBox(width: 8),
-        Expanded(child: _StatCard(
-          icon: Icons.message_outlined, label: 'Messages', value: '$msgs',
-        )),
-        const SizedBox(width: 8),
-        Expanded(child: _StatCard(
-          icon: Icons.restaurant_menu, label: 'Saved', value: '$saved',
-        )),
-      ],
+    return _StatCard(
+      icon: Icons.restaurant_menu, label: 'Saved Recipes', value: '$saved',
     );
   }
 
-  // ─── Nutrition avg card ────────────────────────────────────────────────────
-  Widget _buildNutritionCard(BuildContext context, Map<String, dynamic> avg) {
-    final kcal = (avg['calories'] as num?)?.toDouble() ?? 0;
-    final protein = (avg['protein_g'] as num?)?.toDouble() ?? 0;
-    final carbs = (avg['carbs_g'] as num?)?.toDouble() ?? 0;
-    final fat = (avg['fat_g'] as num?)?.toDouble() ?? 0;
-    final fiber = (avg['fiber_g'] as num?)?.toDouble() ?? 0;
-    final sodium = (avg['sodium_mg'] as num?)?.toDouble() ?? 0;
-    final mealCount = (avg['meal_count'] as num?)?.toInt() ?? 0;
-
-    final total = protein + carbs + fat;
+  // ─── Nutrition total card ──────────────────────────────────────────────────
+  Widget _buildNutritionCard(BuildContext context, Map<String, dynamic> total) {
+    final kcal    = (total['calories']  as num?)?.toDouble() ?? 0;
+    final protein = (total['protein_g'] as num?)?.toDouble() ?? 0;
+    final carbs   = (total['carbs_g']   as num?)?.toDouble() ?? 0;
+    final fat     = (total['fat_g']     as num?)?.toDouble() ?? 0;
+    final fiber   = (total['fiber_g']   as num?)?.toDouble() ?? 0;
+    final sodium  = (total['sodium_mg'] as num?)?.toDouble() ?? 0;
+    final mealCount = (total['meal_count'] as num?)?.toInt() ?? 0;
+    final macroSum = protein + carbs + fat;
 
     return Card(
       child: Padding(
@@ -212,13 +213,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                Text(
-                  'Avg Nutrition per Saved Meal',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Text(
+                    'Total Nutrition (All Saved Meals)',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
@@ -235,46 +237,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                // Macro pie chart
                 SizedBox(
                   width: 140,
                   height: 140,
-                  child: total > 0
-                      ? PieChart(
-                          PieChartData(
-                            sectionsSpace: 2,
-                            centerSpaceRadius: 38,
-                            sections: [
-                              PieChartSectionData(
-                                value: protein,
-                                color: AppColors.primary,
-                                title: '',
-                                radius: 28,
-                              ),
-                              PieChartSectionData(
-                                value: carbs,
-                                color: Colors.orange,
-                                title: '',
-                                radius: 28,
-                              ),
-                              PieChartSectionData(
-                                value: fat,
-                                color: Colors.blue.shade300,
-                                title: '',
-                                radius: 28,
-                              ),
-                            ],
-                          ),
-                        )
+                  child: macroSum > 0
+                      ? PieChart(PieChartData(
+                          sectionsSpace: 2,
+                          centerSpaceRadius: 38,
+                          sections: [
+                            PieChartSectionData(value: protein, color: AppColors.primary, title: '', radius: 28),
+                            PieChartSectionData(value: carbs,   color: Colors.orange,     title: '', radius: 28),
+                            PieChartSectionData(value: fat,     color: Colors.blue.shade300, title: '', radius: 28),
+                          ],
+                        ))
                       : const Center(child: Text('No data', style: TextStyle(color: Colors.grey))),
                 ),
                 const SizedBox(width: 16),
-                // Calories + legend
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Calorie badge
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
@@ -290,22 +272,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               '${kcal.toStringAsFixed(0)} kcal',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primaryDark,
-                                fontSize: 15,
+                                color: AppColors.primaryDark, fontSize: 15,
                               ),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _MacroRow(color: AppColors.primary, label: 'Protein', grams: protein, total: total),
+                      _MacroRow(color: AppColors.primary,     label: 'Protein', grams: protein, total: macroSum),
                       const SizedBox(height: 6),
-                      _MacroRow(color: Colors.orange, label: 'Carbs', grams: carbs, total: total),
+                      _MacroRow(color: Colors.orange,         label: 'Carbs',   grams: carbs,   total: macroSum),
                       const SizedBox(height: 6),
-                      _MacroRow(color: Colors.blue.shade300, label: 'Fat', grams: fat, total: total),
+                      _MacroRow(color: Colors.blue.shade300,  label: 'Fat',     grams: fat,     total: macroSum),
                       if (fiber > 0) ...[
                         const SizedBox(height: 6),
-                        _MacroRow(color: Colors.green.shade300, label: 'Fiber', grams: fiber, total: total, showPct: false),
+                        _MacroRow(color: Colors.green.shade300, label: 'Fiber', grams: fiber, total: macroSum, showPct: false),
                       ],
                     ],
                   ),
@@ -321,23 +302,115 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Icon(Icons.water_drop_outlined, size: 14, color: Colors.grey),
                   const SizedBox(width: 4),
                   Text(
-                    'Avg sodium: ${sodium.toStringAsFixed(0)} mg/meal',
+                    'Total sodium: ${sodium.toStringAsFixed(0)} mg',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                  const Spacer(),
-                  if (sodium > 2300)
-                    const Text(
-                      '⚠ High',
-                      style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
-                    )
-                  else
-                    const Text(
-                      '✓ OK',
-                      style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.bold),
-                    ),
                 ],
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Daily calorie bar chart ───────────────────────────────────────────────
+  Widget _buildDailyChart(BuildContext context) {
+    final maxCal = _nutritionDaily
+        .map((d) => (d['calories'] as num?)?.toDouble() ?? 0.0)
+        .fold(0.0, (a, b) => a > b ? a : b);
+    final yMax = maxCal > 0 ? (maxCal * 1.25).ceilToDouble() : 500.0;
+    final yInterval = (yMax / 4).ceilToDouble();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Daily Calorie Intake (Last 7 Days)',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 160,
+              child: BarChart(
+                BarChartData(
+                  maxY: yMax,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipItem: (group, _, rod, __) {
+                        final day = _nutritionDaily[group.x.toInt()];
+                        return BarTooltipItem(
+                          '${day['date']}\n${rod.toY.toStringAsFixed(0)} kcal',
+                          const TextStyle(color: Colors.white, fontSize: 11),
+                        );
+                      },
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 40,
+                        interval: yInterval,
+                        getTitlesWidget: (v, _) => Text(
+                          v.toInt().toString(),
+                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (v, _) {
+                          final i = v.toInt();
+                          if (i < 0 || i >= _nutritionDaily.length) return const SizedBox.shrink();
+                          final parts = (_nutritionDaily[i]['date'] as String? ?? '').split('-');
+                          final label = parts.length == 3 ? '${parts[1]}/${parts[2]}' : '';
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                          );
+                        },
+                      ),
+                    ),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: yInterval,
+                    getDrawingHorizontalLine: (_) => const FlLine(
+                      color: Color(0xFFEEEEEE), strokeWidth: 1,
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  barGroups: List.generate(_nutritionDaily.length, (i) {
+                    final cal = (_nutritionDaily[i]['calories'] as num?)?.toDouble() ?? 0.0;
+                    return BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: cal,
+                          color: AppColors.primary,
+                          width: 18,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          backDrawRodData: BackgroundBarChartRodData(
+                            show: true, toY: yMax, color: AppColors.cardGreen,
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -354,9 +427,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Text(
               'Recently Saved Recipes',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             ..._recentRecipes.map((recipe) => _RecipeTile(recipe: recipe)),
@@ -396,9 +467,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 4),
                   Text(
                     _tip,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -419,10 +488,8 @@ class _MacroRow extends StatelessWidget {
   final bool showPct;
 
   const _MacroRow({
-    required this.color,
-    required this.label,
-    required this.grams,
-    required this.total,
+    required this.color, required this.label,
+    required this.grams, required this.total,
     this.showPct = true,
   });
 
@@ -452,26 +519,22 @@ class _RecipeTile extends StatelessWidget {
   String _formatDate(String iso) {
     try {
       final dt = DateTime.parse(iso).toLocal();
-      final now = DateTime.now();
-      final diff = now.difference(dt);
+      final diff = DateTime.now().difference(dt);
       if (diff.inDays == 0) return 'Today';
       if (diff.inDays == 1) return 'Yesterday';
       if (diff.inDays < 7) return '${diff.inDays} days ago';
       return '${dt.day}/${dt.month}/${dt.year}';
-    } catch (_) {
-      return '';
-    }
+    } catch (_) { return ''; }
   }
 
   @override
   Widget build(BuildContext context) {
-    final name = recipe['recipe_name'] as String? ?? '';
-    final savedAt = recipe['saved_at'] as String? ?? '';
-    final kcal = (recipe['calories'] as num?)?.toDouble();
+    final name  = recipe['recipe_name'] as String? ?? '';
+    final savedAt = recipe['saved_at']  as String? ?? '';
+    final kcal    = (recipe['calories']  as num?)?.toDouble();
     final protein = (recipe['protein_g'] as num?)?.toDouble();
-    final carbs = (recipe['carbs_g'] as num?)?.toDouble();
-    final fat = (recipe['fat_g'] as num?)?.toDouble();
-    final hasNutrition = kcal != null;
+    final carbs   = (recipe['carbs_g']   as num?)?.toDouble();
+    final fat     = (recipe['fat_g']     as num?)?.toDouble();
 
     return Padding(
       padding: const EdgeInsets.only(top: 10),
@@ -481,9 +544,7 @@ class _RecipeTile extends StatelessWidget {
           Container(
             margin: const EdgeInsets.only(top: 2),
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.cardGreen, borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: AppColors.cardGreen, borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.restaurant_menu, color: AppColors.primary, size: 18),
           ),
           const SizedBox(width: 10),
@@ -491,33 +552,20 @@ class _RecipeTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(height: 4),
-                if (hasNutrition)
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      _NutritionChip(label: '${kcal.toStringAsFixed(0)} kcal', color: AppColors.primary),
-                      if (protein != null)
-                        _NutritionChip(label: '${protein.toStringAsFixed(0)}g P', color: Colors.green.shade600),
-                      if (carbs != null)
-                        _NutritionChip(label: '${carbs.toStringAsFixed(0)}g C', color: Colors.orange),
-                      if (fat != null)
-                        _NutritionChip(label: '${fat.toStringAsFixed(0)}g F', color: Colors.blue.shade400),
-                    ],
-                  )
+                if (kcal != null)
+                  Wrap(spacing: 6, children: [
+                    _NutritionChip(label: '${kcal.toStringAsFixed(0)} kcal', color: AppColors.primary),
+                    if (protein != null) _NutritionChip(label: '${protein.toStringAsFixed(0)}g P', color: Colors.green.shade600),
+                    if (carbs   != null) _NutritionChip(label: '${carbs.toStringAsFixed(0)}g C',   color: Colors.orange),
+                    if (fat     != null) _NutritionChip(label: '${fat.toStringAsFixed(0)}g F',     color: Colors.blue.shade400),
+                  ])
                 else
                   const Text('No nutrition data', style: TextStyle(fontSize: 11, color: Colors.grey)),
                 const SizedBox(height: 2),
-                Text(
-                  _formatDate(savedAt),
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                ),
+                Text(_formatDate(savedAt), style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
           ),
@@ -537,13 +585,9 @@ class _NutritionChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
-      ),
+      child: Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -553,7 +597,6 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-
   const _StatCard({required this.icon, required this.label, required this.value});
 
   @override
@@ -565,19 +608,12 @@ class _StatCard extends StatelessWidget {
           children: [
             Icon(icon, color: AppColors.primary, size: 22),
             const SizedBox(height: 6),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold, color: AppColors.primaryDark,
-              ),
-            ),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey, fontSize: 11,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold, color: AppColors.primaryDark,
+            )),
+            Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.grey, fontSize: 11,
+            ), textAlign: TextAlign.center),
           ],
         ),
       ),

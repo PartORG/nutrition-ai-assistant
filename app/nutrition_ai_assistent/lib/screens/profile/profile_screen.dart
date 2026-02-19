@@ -341,28 +341,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildActionsSection(BuildContext context) {
     return Column(
       children: [
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.notifications_outlined, color: AppColors.primary),
-                title: const Text('Notifications'),
-                trailing: Switch(
-                  value: true,
-                  onChanged: (_) {},
-                  activeThumbColor: AppColors.primary,
-                ),
-              ),
-              const Divider(height: 1),
-              const ListTile(
-                leading: Icon(Icons.language, color: AppColors.primary),
-                title: Text('Language'),
-                trailing: Text('English', style: TextStyle(color: Colors.grey)),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(

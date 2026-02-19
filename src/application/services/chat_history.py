@@ -99,3 +99,20 @@ class ChatHistoryService:
     ) -> list[Conversation]:
         """List all conversations for a user, newest first."""
         return await self._conversation_repo.get_by_user(user_id)
+
+    async def purge_old_data(self, user_id: int, cutoff_iso: str) -> None:
+        """Soft-delete messages and conversations older than *cutoff_iso*.
+
+        Called on every WebSocket connect to keep stored data bounded.
+        Failures are logged but never re-raised — the session continues.
+        """
+        try:
+            msgs = await self._message_repo.delete_old_for_user(user_id, cutoff_iso)
+            convs = await self._conversation_repo.delete_old_for_user(user_id, cutoff_iso)
+            if msgs or convs:
+                logger.info(
+                    "Purged %d old message(s) and %d old conversation(s) for user %d",
+                    msgs, convs, user_id,
+                )
+        except Exception:
+            logger.exception("Failed to purge old chat data for user %d", user_id)

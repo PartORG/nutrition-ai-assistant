@@ -94,7 +94,7 @@ class SQLiteAnalyticsRepository:
             ]
 
     async def get_user_dashboard(self, user_id: int) -> dict:
-        """Per-user dashboard: overview counts, avg nutrition, recent saved recipes."""
+        """Per-user dashboard: overview counts, total nutrition, daily breakdown, recent saved recipes."""
         async with self._conn.acquire() as conn:
             # User-scoped activity counts
             overview_rows = await conn.execute_fetchall(
@@ -115,35 +115,65 @@ class SQLiteAnalyticsRepository:
                 "saved_recipes": row[2] or 0,
             }
 
-            # Average nutrition across all saved meals for this user
-            avg_rows = await conn.execute_fetchall(
+            # TOTAL nutrition across all saved meals (sum, not average)
+            sum_rows = await conn.execute_fetchall(
                 """SELECT
-                    AVG(calories), AVG(protein), AVG(fat),
-                    AVG(carbohydrates), AVG(fiber), AVG(sugar), AVG(sodium),
+                    SUM(calories), SUM(protein), SUM(fat),
+                    SUM(carbohydrates), SUM(fiber), SUM(sugar), SUM(sodium),
                     COUNT(*)
                    FROM nutrition_history
                    WHERE user_id = ? AND (deleted_at = '' OR deleted_at IS NULL)
                 """,
                 (user_id,),
             )
-            nutrition_avg = None
-            if avg_rows and avg_rows[0][0] is not None:
-                ar = avg_rows[0]
-                nutrition_avg = {
-                    "calories": round(ar[0] or 0, 1),
-                    "protein_g": round(ar[1] or 0, 1),
-                    "fat_g": round(ar[2] or 0, 1),
-                    "carbs_g": round(ar[3] or 0, 1),
-                    "fiber_g": round(ar[4] or 0, 1),
-                    "sugar_g": round(ar[5] or 0, 1),
-                    "sodium_mg": round(ar[6] or 0, 1),
-                    "meal_count": ar[7] or 0,
+            nutrition_total = None
+            if sum_rows and sum_rows[0][0] is not None:
+                sr = sum_rows[0]
+                nutrition_total = {
+                    "calories": round(sr[0] or 0, 1),
+                    "protein_g": round(sr[1] or 0, 1),
+                    "fat_g": round(sr[2] or 0, 1),
+                    "carbs_g": round(sr[3] or 0, 1),
+                    "fiber_g": round(sr[4] or 0, 1),
+                    "sugar_g": round(sr[5] or 0, 1),
+                    "sodium_mg": round(sr[6] or 0, 1),
+                    "meal_count": sr[7] or 0,
                 }
+
+            # Daily nutrition totals for the last 7 days (for bar chart)
+            daily_rows = await conn.execute_fetchall(
+                """SELECT
+                    DATE(created_at) AS day,
+                    SUM(calories), SUM(protein), SUM(fat),
+                    SUM(carbohydrates), SUM(fiber), SUM(sugar), SUM(sodium)
+                   FROM nutrition_history
+                   WHERE user_id = ?
+                     AND (deleted_at = '' OR deleted_at IS NULL)
+                     AND created_at >= DATE('now', '-6 days')
+                   GROUP BY day
+                   ORDER BY day ASC
+                """,
+                (user_id,),
+            )
+            nutrition_daily = [
+                {
+                    "date": r[0] or "",
+                    "calories": round(r[1] or 0, 1),
+                    "protein_g": round(r[2] or 0, 1),
+                    "fat_g": round(r[3] or 0, 1),
+                    "carbs_g": round(r[4] or 0, 1),
+                    "fiber_g": round(r[5] or 0, 1),
+                    "sugar_g": round(r[6] or 0, 1),
+                    "sodium_mg": round(r[7] or 0, 1),
+                }
+                for r in daily_rows
+            ]
 
             # Recent saved recipes joined with their nutrition (last 10)
             recipe_rows = await conn.execute_fetchall(
                 """SELECT rh.id, rh.recipe_name, rh.created_at,
-                          nh.calories, nh.protein, nh.fat, nh.carbohydrates, nh.fiber
+                          nh.calories, nh.protein, nh.fat, nh.carbohydrates, nh.fiber, nh.sodium,
+                          rh.ingredients, rh.cook_instructions, rh.prep_time, rh.servings
                    FROM recipe_history rh
                    LEFT JOIN nutrition_history nh
                        ON nh.recipe_id = rh.id
@@ -165,12 +195,18 @@ class SQLiteAnalyticsRepository:
                     "fat_g": r[5],
                     "carbs_g": r[6],
                     "fiber_g": r[7],
+                    "sodium_mg": r[8],
+                    "ingredients": r[9] or "",
+                    "cook_instructions": r[10] or "",
+                    "prep_time": r[11] or "",
+                    "servings": r[12],
                 }
                 for r in recipe_rows
             ]
 
         return {
             "overview": overview,
-            "nutrition_avg": nutrition_avg,
+            "nutrition_total": nutrition_total,
+            "nutrition_daily": nutrition_daily,
             "recent_recipes": recent_recipes,
         }
