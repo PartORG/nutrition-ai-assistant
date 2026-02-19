@@ -1,7 +1,9 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../main.dart';
 import '../../theme/app_theme.dart';
 
 class ChatMessage {
@@ -22,46 +24,82 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  bool get _isCameraSupported =>
-      kIsWeb || Platform.isAndroid || Platform.isIOS;
+  bool get _isCameraSupported => kIsWeb || Platform.isAndroid || Platform.isIOS;
+
+  bool _connected = false;
+  bool _connecting = false;
+  bool _waitingForResponse = false;
 
   final List<ChatMessage> _messages = [
     ChatMessage(
-      text:
-          'Hello! I\'m your NutriAI assistant. I can help you with personalized nutrition advice, recipe recommendations, and food analysis. How can I help you today?',
+      text: 'Hello! I\'m your NutriAI assistant. How can I help you today?',
       isUser: false,
     ),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _connect();
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    AppServices.instance.chat.disconnect();
     super.dispose();
+  }
+
+  Future<void> _connect() async {
+    setState(() { _connecting = true; _connected = false; });
+    try {
+      await AppServices.instance.chat.connect(
+        onMessage: (text) {
+          if (!mounted) return;
+          setState(() {
+            _waitingForResponse = false;
+            _messages.add(ChatMessage(text: text, isUser: false));
+          });
+          _scrollToBottom();
+        },
+        onError: (_) {
+          if (mounted) setState(() { _connected = false; _waitingForResponse = false; });
+        },
+        onDone: () {
+          if (mounted) setState(() { _connected = false; _waitingForResponse = false; });
+        },
+      );
+      if (mounted) setState(() => _connected = true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _connected = false;
+        _messages.add(ChatMessage(
+          text: 'Could not connect to server. Make sure the API is running and you are logged in.',
+          isUser: false,
+        ));
+      });
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
   }
 
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
-
+    if (!_connected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not connected. Tap the reconnect button.')),
+      );
+      return;
+    }
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
       _messageController.clear();
+      _waitingForResponse = true;
     });
-
-    // TODO: Send to API and get real response
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(ChatMessage(
-          text:
-              'Thanks for your message! This is a placeholder response. The AI agent will process your request and provide personalized nutrition advice here.',
-          isUser: false,
-        ));
-      });
-      _scrollToBottom();
-    });
-
+    AppServices.instance.chat.send(text);
     _scrollToBottom();
   }
 
@@ -90,27 +128,22 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40,
-                height: 4,
+                width: 40, height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
+                  color: Colors.grey[300], borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(height: 20),
               Text(
                 'Add Food Photo',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.primaryDark,
-                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryDark, fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Take a photo or choose from your library to analyze food',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -119,8 +152,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.cardGreen,
-                      borderRadius: BorderRadius.circular(12),
+                      color: AppColors.cardGreen, borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.camera_alt, color: AppColors.primary),
                   ),
@@ -134,8 +166,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.cardGreen,
-                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.cardGreen, borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.photo_library, color: AppColors.primary),
                 ),
@@ -153,30 +184,39 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     Navigator.of(context).pop();
-    // TODO: Integrate with actual image picker and API
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: source);
+    final XFile? image = await ImagePicker().pickImage(source: source);
+    if (image == null || !_connected) return;
 
-    if (image != null) {
+    setState(() {
+      _messages.add(ChatMessage(
+        text: 'Uploading image...',
+        isUser: true,
+        imagePath: image.path,
+      ));
+      _waitingForResponse = true;
+    });
+    _scrollToBottom();
+
+    try {
+      // Read bytes first — XFile.readAsBytes() works on all platforms including Web.
+      // (http.MultipartFile.fromPath uses dart:io which is unavailable in browsers)
+      final bytes = await image.readAsBytes();
+      final serverPath = await AppServices.instance.api.uploadImageBytes(
+        bytes,
+        image.name,
+      );
+      // Send the server path through WebSocket so the agent can open it
+      AppServices.instance.chat.send(
+        'Please analyze the food in this image: $serverPath',
+      );
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
+        _waitingForResponse = false;
         _messages.add(ChatMessage(
-          text: 'Analyzing food image...',
-          isUser: true,
-          imagePath: image.path,
+          text: 'Could not upload image: $e',
+          isUser: false,
         ));
-      });
-
-      // TODO: Send image to API for analysis
-      Future.delayed(const Duration(seconds: 1), () {
-        if (!mounted) return;
-        setState(() {
-          _messages.add(ChatMessage(
-            text:
-                'I can see the food in your photo! This is a placeholder. The AI vision model will analyze the ingredients and provide nutrition info and recipe suggestions.',
-            isUser: false,
-          ));
-        });
-        _scrollToBottom();
       });
     }
   }
@@ -185,14 +225,39 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        if (_connecting)
+          const LinearProgressIndicator(
+            backgroundColor: AppColors.cardGreen,
+            color: AppColors.primary,
+          ),
+        if (!_connected && !_connecting)
+          Container(
+            color: Colors.orange.shade50,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.wifi_off, color: Colors.orange, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Disconnected', style: TextStyle(color: Colors.orange, fontSize: 13)),
+                ),
+                TextButton(
+                  onPressed: _connect,
+                  child: const Text('Reconnect', style: TextStyle(fontSize: 13)),
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.all(16),
-            itemCount: _messages.length,
+            itemCount: _messages.length + (_waitingForResponse ? 1 : 0),
             itemBuilder: (context, index) {
-              final message = _messages[index];
-              return _MessageBubble(message: message);
+              if (_waitingForResponse && index == _messages.length) {
+                return const _TypingIndicator();
+              }
+              return _MessageBubble(message: _messages[index]);
             },
           ),
         ),
@@ -202,8 +267,7 @@ class _ChatScreenState extends State<ChatScreen> {
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -2),
+                blurRadius: 10, offset: const Offset(0, -2),
               ),
             ],
           ),
@@ -221,6 +285,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: TextField(
                     controller: _messageController,
+                    enabled: !_waitingForResponse,
                     decoration: InputDecoration(
                       hintText: 'Ask about nutrition...',
                       border: OutlineInputBorder(
@@ -229,10 +294,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       filled: true,
                       fillColor: AppColors.cardGreen,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _sendMessage(),
@@ -240,9 +302,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(width: 4),
                 CircleAvatar(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: (_connected && !_waitingForResponse)
+                      ? AppColors.primary
+                      : Colors.grey,
                   child: IconButton(
-                    onPressed: _sendMessage,
+                    onPressed: (_connected && !_waitingForResponse) ? _sendMessage : null,
                     icon: const Icon(Icons.send, color: Colors.white, size: 20),
                   ),
                 ),
@@ -255,9 +319,97 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+class _TypingIndicator extends StatefulWidget {
+  const _TypingIndicator();
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 4),
+            padding: const EdgeInsets.all(6),
+            decoration: const BoxDecoration(
+              color: AppColors.cardGreen, shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.eco, size: 18, color: AppColors.primary),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+                bottomLeft: Radius.circular(4),
+                bottomRight: Radius.circular(16),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 5, offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(3, (i) {
+                return AnimatedBuilder(
+                  animation: _controller,
+                  builder: (_, __) {
+                    final phase = (_controller.value - i * 0.2).clamp(0.0, 1.0);
+                    final opacity = (0.3 + 0.7 * (phase < 0.5
+                        ? phase / 0.5
+                        : (1.0 - phase) / 0.5)).clamp(0.3, 1.0);
+                    return Container(
+                      margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: opacity),
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  },
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
-
   const _MessageBubble({required this.message});
 
   @override
@@ -266,8 +418,7 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser)
@@ -275,8 +426,7 @@ class _MessageBubble extends StatelessWidget {
               margin: const EdgeInsets.only(right: 8, top: 4),
               padding: const EdgeInsets.all(6),
               decoration: const BoxDecoration(
-                color: AppColors.cardGreen,
-                shape: BoxShape.circle,
+                color: AppColors.cardGreen, shape: BoxShape.circle,
               ),
               child: const Icon(Icons.eco, size: 18, color: AppColors.primary),
             ),
@@ -294,18 +444,36 @@ class _MessageBubble extends StatelessWidget {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 5,
-                    offset: const Offset(0, 2),
+                    blurRadius: 5, offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: Text(
-                message.text,
-                style: TextStyle(
-                  color: isUser ? Colors.white : Colors.black87,
-                  fontSize: 14,
-                ),
-              ),
+              child: isUser
+                  ? Text(
+                      message.text,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    )
+                  : MarkdownBody(
+                      data: message.text,
+                      styleSheet: MarkdownStyleSheet(
+                        p: const TextStyle(color: Colors.black87, fontSize: 14),
+                        strong: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        h1: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold),
+                        h2: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold),
+                        h3: const TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold),
+                        listBullet: const TextStyle(color: Colors.black87, fontSize: 14),
+                        blockquote: const TextStyle(color: Colors.black54, fontSize: 14),
+                        code: const TextStyle(fontSize: 13, backgroundColor: Color(0xFFF0F0F0)),
+                        horizontalRuleDecoration: const BoxDecoration(
+                          border: Border(top: BorderSide(color: Color(0xFFE0E0E0))),
+                        ),
+                      ),
+                      shrinkWrap: true,
+                    ),
             ),
           ),
           if (isUser) const SizedBox(width: 8),

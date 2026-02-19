@@ -33,7 +33,9 @@ langchain-community==0.3.14
 langchain-text-splitters==0.3.4
 langchain-openai==0.2.14
 langchain-huggingface==0.1.2
+transformers>=4.40.0
 langchain-ollama==0.2.2
+ollama>=0.3.0
 langchain-groq==0.2.2
 langchainhub==0.1.21
 sentence-transformers==3.3.1
@@ -48,6 +50,7 @@ typer==0.15.1
 rich==13.9.4
 
 # Utilities
+aiosqlite==0.22.1
 aiofiles==22.1.0
 protobuf==4.25.3
 typing-extensions==4.12.2
@@ -62,3 +65,6 @@ pydantic==2.5.0
 streamlit==1.28.0
 requests==2.31.0
 bcrypt==3.2.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.9
