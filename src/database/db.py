@@ -16,7 +16,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Generator, List, Optional
 
-from src.database.models import (
+from database.models import (
     User,
     MedicalAdvice,
     Authentication,
@@ -27,7 +27,7 @@ from src.database.models import (
 
 logger = logging.getLogger(__name__)
 
-DB_FILE = "users.db"
+DB_FILE = "src/database/users.db"
 
 
 class UserDBHandler:
