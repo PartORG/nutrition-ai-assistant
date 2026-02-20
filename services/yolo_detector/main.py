@@ -55,7 +55,7 @@ _detector: YOLOFoodDetector | None = None
 async def lifespan(app: FastAPI):
     global _detector
     yolo_path = os.getenv("YOLO_MODEL_PATH", "yolov8n.pt")
-    food_path = os.getenv("FOOD_MODEL_PATH", "/app/models/food101_resnet18_best.pth")
+    food_path = os.getenv("FOOD_MODEL_PATH", "./models/food101_resnet18_best.pth")
     conf = float(os.getenv("CONF_THRESHOLD", "0.6"))
 
     logger.info("Loading YOLO food detector...")

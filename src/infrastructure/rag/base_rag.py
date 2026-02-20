@@ -18,6 +18,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
 from langchain_ollama import OllamaLLM
+from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_core.language_models import BaseChatModel
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
@@ -46,6 +49,9 @@ class BaseRAG(ABC):
         embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
         ollama_base_url: str = "http://localhost:11434/",
         llm_format: Optional[str] = None,
+        llm_provider: str = "ollama",  # NEW: "ollama", "groq", or "openai"
+        openai_api_key: Optional[str] = None,  # NEW: API key for OpenAI
+        groq_api_key: Optional[str] = None,  # NEW: API key for Groq
     ):
         self.vectorstore_path = Path(vectorstore_path)
         self.model_name = model_name
@@ -53,9 +59,12 @@ class BaseRAG(ABC):
         self.embedding_model_name = embedding_model
         self.ollama_base_url = ollama_base_url
         self.llm_format = llm_format
+        self.llm_provider = llm_provider  # NEW
+        self.openai_api_key = openai_api_key  # NEW
+        self.groq_api_key = groq_api_key  # NEW
 
         self.embeddings: Optional[HuggingFaceEmbeddings] = None
-        self.llm: Optional[OllamaLLM] = None
+        self.llm: Optional[BaseChatModel] = None  # CHANGED: more generic type
         self.vectorstore: Optional[FAISS] = None
         self.retriever = None
         self.rag_chain = None
@@ -63,8 +72,8 @@ class BaseRAG(ABC):
         self._custom_prompt: Optional[str] = None
 
         logger.info(
-            "%s instance created (model=%s, vectorstore=%s)",
-            self.__class__.__name__, self.model_name, self.vectorstore_path,
+            "%s instance created (provider=%s, model=%s, vectorstore=%s)",
+            self.__class__.__name__, self.llm_provider, self.model_name, self.vectorstore_path,
         )
 
     # ================================================================
@@ -81,22 +90,13 @@ class BaseRAG(ABC):
         )
         logger.info("Embedding model loaded")
 
-        llm_kwargs: Dict[str, Any] = {
-            "model": self.model_name,
-            "temperature": self.temperature,
-            "base_url": self.ollama_base_url,
-        }
-        if self.llm_format:
-            llm_kwargs["format"] = self.llm_format
-        self.llm = OllamaLLM(**llm_kwargs)
-        logger.info("LLM initialized (model=%s)", self.model_name)
+        # Build LLM based on configured provider
+        self.llm = self._build_llm()
+        logger.info("LLM initialized (provider=%s, model=%s)", self.llm_provider, self.model_name)
 
         if not force_rebuild and self._vectorstore_exists():
             logger.info("Loading existing vectorstore from disk")
             self._load_vectorstore()
-            # Validate that the stored index dimensions match the current
-            # embedding model. A mismatch (different model than when the index
-            # was built) causes FAISS to raise AssertionError on every query.
             if self.vectorstore is not None:
                 try:
                     self.vectorstore.similarity_search("dimension check", k=1)
@@ -125,6 +125,53 @@ class BaseRAG(ABC):
         self._setup_retriever()
         self._build_chain()
         logger.info("%s ready for queries", self.__class__.__name__)
+
+    def _build_llm(self) -> BaseChatModel:
+        """Build the LLM based on the configured provider.
+        
+        Returns:
+            BaseChatModel instance for the selected provider.
+            
+        Raises:
+            ValueError: If provider is unsupported or required credentials are missing.
+        """
+        if self.llm_provider == "groq":
+            if not self.groq_api_key:
+                raise ValueError("Groq API key required when llm_provider='groq'")
+            logger.info("Building Groq LLM (model=%s)", self.model_name)
+            return ChatGroq(
+                model=self.model_name,
+                temperature=self.temperature,
+                groq_api_key=self.groq_api_key,
+                max_tokens=512,
+            )
+        
+        elif self.llm_provider == "openai":
+            if not self.openai_api_key:
+                raise ValueError("OpenAI API key required when llm_provider='openai'")
+            logger.info("Building OpenAI LLM (model=%s)", self.model_name)
+            return ChatOpenAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                openai_api_key=self.openai_api_key,
+            )
+        
+        elif self.llm_provider == "ollama":
+            logger.info("Building Ollama LLM (model=%s)", self.model_name)
+            llm_kwargs: Dict[str, Any] = {
+                "model": self.model_name,
+                "temperature": self.temperature,
+                "base_url": self.ollama_base_url,
+            }
+            if self.llm_format:
+                llm_kwargs["format"] = self.llm_format
+            return OllamaLLM(**llm_kwargs)
+        
+        else:
+            raise ValueError(
+                f"Unsupported llm_provider: {self.llm_provider}. "
+                "Must be 'ollama', 'groq', or 'openai'"
+            )
 
     def ask(self, query: str) -> str:
         """Query the RAG system and return the answer string."""
@@ -287,6 +334,7 @@ class BaseRAG(ABC):
     def get_stats(self) -> Dict[str, Any]:
         stats: Dict[str, Any] = {
             "class": self.__class__.__name__,
+            "provider": self.llm_provider,
             "model": self.model_name,
             "temperature": self.temperature,
             "vectorstore_path": str(self.vectorstore_path),

@@ -76,15 +76,21 @@ class ServiceFactory:
     """Composition root — wires all dependencies together.
 
     Call initialize() once at startup, then create services/agents as needed.
+    Expensive LLM objects are built once during initialize() and reused.
     """
 
     def __init__(self, config: Settings):
         self._config = config
         self._connection = AsyncSQLiteConnection(config.db_path)
 
-        # Lazy singletons for expensive resources (RAGs)
+        # Lazy singletons for expensive resources
         self._medical_rag: Optional[MedicalRAG] = None
         self._recipe_rag: Optional[RecipeNutritionRAG] = None
+        self._agent_llm = None
+        self._intent_parser: Optional[OllamaIntentParser] = None
+        self._safety_filter: Optional[OllamaSafetyFilter] = None
+        self._image_detector = None
+
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -94,35 +100,52 @@ class ServiceFactory:
         """
         logger.info("Initializing ServiceFactory...")
 
-        # Run database migrations
         await run_migrations(self._connection)
         logger.info("Database migrations complete")
 
-        # Initialize Medical RAG
+        # ── Build shared LLM-backed components ONCE ──────────────────
+        self._intent_parser = OllamaIntentParser(
+            model_name=self._config.llm_model,
+            ollama_base_url=self._config.ollama_base_url,
+        )
+        self._safety_filter = OllamaSafetyFilter(
+            model_name=self._config.llm_model,
+            ollama_base_url=self._config.ollama_base_url,
+        )
+        self._agent_llm = self._build_agent_llm()
+        self._image_detector = self._build_image_detector()
+        logger.info("Shared LLM components initialized")
+
+        # Initialize Medical RAG with configured provider
         self._medical_rag = MedicalRAG(
             folder_paths=[str(self._config.pdf_dir)],
-            model_name=self._config.llm_model,
+            model_name=self._config.rag_llm_model,
             vectorstore_path=str(self._config.medical_vectorstore_path),
-            embedding_model=self._config.embedding_model,
             ollama_base_url=self._config.ollama_base_url,
+            llm_provider=self._config.rag_llm_provider,
+            openai_api_key=self._config.openai_api_key,
+            groq_api_key=self._config.groq_api_key,
         )
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None, self._medical_rag.initialize, False,
         )
-        logger.info("Medical RAG initialized")
+        logger.info("Medical RAG initialized (provider=%s)", self._config.rag_llm_provider)
 
-        # Initialize Recipe RAG
+        # Initialize Recipe RAG with configured provider
         self._recipe_rag = RecipeNutritionRAG(
             data_folder=str(self._config.data_dir),
-            model_name=self._config.llm_model,
+            model_name=self._config.rag_llm_model,
             vectorstore_path=str(self._config.recipes_nutrition_vector_path),
             ollama_base_url=self._config.ollama_base_url,
+            llm_provider=self._config.rag_llm_provider,
+            openai_api_key=self._config.openai_api_key,
+            groq_api_key=self._config.groq_api_key,
         )
         await loop.run_in_executor(
             None, self._recipe_rag.initialize,
         )
-        logger.info("Recipe RAG initialized")
+        logger.info("Recipe RAG initialized (provider=%s)", self._config.rag_llm_provider)
 
         self._initialized = True
         logger.info("ServiceFactory ready")
@@ -132,19 +155,16 @@ class ServiceFactory:
     # ------------------------------------------------------------------
 
     def create_recommendation_service(self) -> RecommendationService:
-        """Create a RecommendationService with all dependencies wired."""
+        """Create a RecommendationService with all dependencies wired.
+
+        Reuses the cached intent_parser and safety_filter singletons.
+        """
         self._ensure_initialized()
         return RecommendationService(
-            intent_parser=OllamaIntentParser(
-                model_name=self._config.llm_model,
-                ollama_base_url=self._config.ollama_base_url,
-            ),
+            intent_parser=self._intent_parser,
             medical_rag=self._medical_rag,
             recipe_rag=self._recipe_rag,
-            safety_filter=OllamaSafetyFilter(
-                model_name=self._config.llm_model,
-                ollama_base_url=self._config.ollama_base_url,
-            ),
+            safety_filter=self._safety_filter,
             medical_repo=SQLiteMedicalRepository(self._connection),
             nutrition_repo=SQLiteNutritionRepository(self._connection),
         )
@@ -164,42 +184,13 @@ class ServiceFactory:
         )
 
     def create_image_analysis_service(self) -> ImageAnalysisService:
-        """Create an ImageAnalysisService with the configured ingredient detector.
+        """Create an ImageAnalysisService.
 
-        Detector selection via CNN_DETECTOR_TYPE env var:
-          "yolo_with_fallback" (default) - tries YOLO microservice, falls back to LLaVA
-          "yolo_only"                     - YOLO microservice only
-          "llava_only"                    - LLaVA via Ollama only
+        Reuses the cached image detector singleton.
         """
         rec_service = self.create_recommendation_service()
-        detector_type = self._config.cnn_detector_type
-        llava_model = self._config.cnn_model_path or "llava"
-
-        if detector_type == "llava_only":
-            detector = LLaVAIngredientDetector(
-                ollama_base_url=self._config.ollama_base_url,
-                model=llava_model,
-            )
-            logger.info("Image detector: LLaVA ('%s') at %s", llava_model, self._config.ollama_base_url)
-
-        elif detector_type == "yolo_only":
-            detector = YOLOServiceDetector(service_url=self._config.yolo_service_url)
-            logger.info("Image detector: YOLO-only at %s", self._config.yolo_service_url)
-
-        else:  # "yolo_with_fallback" (default)
-            yolo = YOLOServiceDetector(service_url=self._config.yolo_service_url)
-            llava = LLaVAIngredientDetector(
-                ollama_base_url=self._config.ollama_base_url,
-                model=llava_model,
-            )
-            detector = FallbackIngredientDetector(primary=yolo, fallback=llava)
-            logger.info(
-                "Image detector: YOLO (%s) with LLaVA fallback",
-                self._config.yolo_service_url,
-            )
-
         return ImageAnalysisService(
-            detector=detector,
+            detector=self._image_detector,
             recommendation_service=rec_service,
         )
 
@@ -234,6 +225,9 @@ class ServiceFactory:
     def create_agent(self, ctx: SessionContext) -> AgentExecutor:
         """Create a fully configured AgentExecutor for a session.
 
+        Only lightweight objects (tools, memory, registry) are created
+        per call — the LLM itself is reused from the cache.
+
         Args:
             ctx: Session context with user info.
 
@@ -264,11 +258,8 @@ class ServiceFactory:
         # Build system prompt with registered tools
         system_prompt = build_system_prompt(registry)
 
-        # Build LLM
-        llm = self._build_agent_llm()
-
         return AgentExecutor(
-            llm=llm,
+            llm=self._agent_llm,
             tools=registry,
             memory=ConversationMemory(
                 chat_history_service=chat_history_service,
@@ -283,21 +274,69 @@ class ServiceFactory:
     # ------------------------------------------------------------------
 
     def _build_agent_llm(self):
-        """Build the LLM for the conversational agent."""
-        if self._config.agent_llm_provider == "groq":
+        """Build the LLM for the conversational agent (called once during init)."""
+        provider = self._config.agent_llm_provider
+        if provider == "groq":
             from langchain_groq import ChatGroq
+            logger.info("Agent LLM: Groq (%s)", self._config.agent_llm_model)
             return ChatGroq(
                 model=self._config.agent_llm_model,
                 temperature=0,
+                groq_api_key=self._config.groq_api_key,
                 max_tokens=512,
+            )
+        elif provider == "openai":
+            from langchain_openai import ChatOpenAI
+            logger.info("Agent LLM: OpenAI (%s)", self._config.agent_llm_model_openai)
+            return ChatOpenAI(
+                model=self._config.agent_llm_model_openai,
+                temperature=0,
+                openai_api_key=self._config.openai_api_key,
             )
         else:
             from langchain_ollama import ChatOllama
+            logger.info("Agent LLM: Ollama (%s)", self._config.agent_llm_model)
             return ChatOllama(
                 model=self._config.agent_llm_model,
                 temperature=0,
                 base_url=self._config.ollama_base_url,
             )
+
+    def _build_image_detector(self):
+        """Build the ingredient detector (called once during init)."""
+        detector_type = self._config.cnn_detector_type
+        llava_model = self._config.cnn_model_path or "llava"
+
+        if detector_type == "llava_only":
+            detector = LLaVAIngredientDetector(
+                ollama_base_url=self._config.ollama_base_url,
+                model=llava_model,
+            )
+            logger.info(
+                "Image detector: LLaVA ('%s') at %s",
+                llava_model, self._config.ollama_base_url,
+            )
+        elif detector_type == "yolo_only":
+            detector = YOLOServiceDetector(
+                service_url=self._config.yolo_service_url,
+            )
+            logger.info(
+                "Image detector: YOLO-only at %s", self._config.yolo_service_url,
+            )
+        else:  # "yolo_with_fallback" (default)
+            yolo = YOLOServiceDetector(
+                service_url=self._config.yolo_service_url,
+            )
+            llava = LLaVAIngredientDetector(
+                ollama_base_url=self._config.ollama_base_url,
+                model=llava_model,
+            )
+            detector = FallbackIngredientDetector(primary=yolo, fallback=llava)
+            logger.info(
+                "Image detector: YOLO (%s) with LLaVA fallback",
+                self._config.yolo_service_url,
+            )
+        return detector
 
     def _ensure_initialized(self) -> None:
         if not self._initialized:

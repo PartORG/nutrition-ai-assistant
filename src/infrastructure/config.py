@@ -36,24 +36,25 @@ class Settings:
     embedding_model: str = "sentence-transformers/all-mpnet-base-v2"
     ollama_base_url: str = "http://localhost:11434/"
 
+    # RAG LLM Configuration (NEW)
+    rag_llm_provider: str = "ollama"  # "ollama", "groq", or "openai"
+    rag_llm_model: str = "llama3.2"   # Model to use for RAG systems
+    groq_api_key: str = ""
+    openai_api_key: str = ""
+
     # Agent LLM (can differ from RAG LLM)
-    # Supported Ollama models: "llama3.2", "llama3:8b", "llama3.1", "mistral", "gemma2"
-    # Supported Groq models:   "llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"
-    # Set via env: AGENT_LLM_MODEL=llama3:8b  AGENT_LLM_PROVIDER=ollama
     agent_llm_model: str = "llama3.2"
-    agent_llm_provider: str = "ollama"  # "ollama" or "groq"
-    agent_max_iterations: int = 5      # max agentic loop steps (3 is often too tight)
+    agent_llm_provider: str = "ollama"
+    agent_max_iterations: int = 5
+    agent_llm_model_openai: str = "gpt-4.1-mini"
 
     # Database
     db_path: str = "users.db"
 
     # CNN / Ingredient Detector
-    # cnn_model_path is repurposed as the LLaVA model name (e.g. "llava", "llava:13b")
     cnn_model_path: str = ""
     cnn_class_labels_path: str = ""
-    # Detector selection: "yolo_with_fallback" | "yolo_only" | "llava_only"
     cnn_detector_type: str = "yolo_with_fallback"
-    # URL of the YOLO microservice (Docker: http://yolo-detector:8001, local: http://localhost:8001)
     yolo_service_url: str = os.getenv("YOLO_SERVICE_URL", "http://localhost:8001")
 
     # JWT
@@ -62,11 +63,13 @@ class Settings:
 
     @classmethod
     def from_env(cls, project_root: Optional[Path] = None) -> Settings:
-        """Build Settings from standard project layout.
-
-        Autodetects project root from this file's location if not provided.
-        """
+        """Build Settings from standard project layout."""
         root = project_root or Path(__file__).resolve().parent.parent.parent
+        
+        # Get API keys from environment
+        openai_key = os.getenv("OPENAI_API_KEY", "")
+        groq_key = os.getenv("GROQ_API_KEY", "")
+        
         return cls(
             project_root=root,
             data_dir=root / "data",
@@ -77,8 +80,16 @@ class Settings:
             llm_model=os.getenv("LLM_MODEL", "llama3.2"),
             embedding_model=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2"),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/"),
+            
+            # RAG LLM settings (NEW)
+            rag_llm_provider=os.getenv("RAG_LLM_PROVIDER", "ollama"),
+            rag_llm_model=os.getenv("RAG_LLM_MODEL", "llama3.2"),
+            groq_api_key=groq_key,
+            openai_api_key=openai_key,
+            
             agent_llm_model=os.getenv("AGENT_LLM_MODEL", "llama3.2"),
             agent_llm_provider=os.getenv("AGENT_LLM_PROVIDER", "ollama"),
+            agent_llm_model_openai=os.getenv("AGENT_LLM_MODEL_OPENAI", "gpt-4.1-mini"),
             agent_max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "5")),
             db_path=os.getenv("DB_PATH", "users.db"),
             cnn_model_path=os.getenv("CNN_MODEL_PATH", ""),
