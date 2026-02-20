@@ -8,6 +8,22 @@ Inherits from BaseRAG and adds:
     - Batched CSV ingestion for large files (2.2M+ rows)
     - Medical-grade system prompt with complete recipe structure
 """
+import sys
+from pathlib import Path
+
+# Add src directory to path
+src_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(src_dir))
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI #imports until here for testing purpose, TODO: remove if not needed
 
 import ast
 import json
@@ -96,7 +112,7 @@ class RecipesNutritionRAG(BaseRAG):
 
 ## INPUT FORMAT YOU RECEIVE
 
-{input} will contain:
+{{input}} will contain:
 - User Query: Original user request
 - Dietary Restrictions: Hard constraints (vegetarian, gluten-free, etc.)
 - Preferences: Soft preferences (cuisine type, meal speed, etc.)
@@ -105,7 +121,7 @@ class RecipesNutritionRAG(BaseRAG):
 - Foods to Limit: Partial restrictions with limits
 - Instructions: Special requests (use fridge ingredients, specific foods wanted)
 
-{context} contains pre-filtered recipe and nutrition data from vector database (may be in metric or imperial units).
+{{context}} contains pre-filtered recipe and nutrition data from vector database (may be in metric or imperial units).
 
 ## PRIORITIZATION RULES (STRICT ORDER)
 
@@ -115,7 +131,7 @@ When requirements conflict, follow this hierarchy:
 3. **MEDIUM**: Nutrition Guidelines (calorie limits, macronutrient targets)
 4. **LOW**: Preferences (cuisine, cooking time, taste)
 
-If no recipe in {context} meets all critical requirements, silently adapt the closest matches to user requirements.
+If no recipe in {{context}} meets all critical requirements, silently adapt the closest matches to user requirements.
 
 ## RECIPE QUANTITY
 
@@ -199,45 +215,83 @@ If no recipe in {context} meets all critical requirements, silently adapt the cl
 
 ## JSON OUTPUT FORMAT (STRICT)
 
-Return ONLY valid JSON (no markdown, no explanations):
+Return ONLY valid JSON (no markdown, no explanations)
+
+## ⚠️ CRITICAL OUTPUT RULES - READ CAREFULLY ⚠️
+
+1. **ONLY use these field names**: name, why_recommended, servings, prep_time, cook_time, ingredients, cook_instructions, nutrition
+2. **FORBIDDEN fields**: Do NOT include "Meal", "Diet Type", "Preparation", "Key Vitamins", "Key Minerals", "Macronutrients"
+3. **Structure**: Root object MUST have single key "recipes" with array value
+4. **Ingredients**: Must be flat string array, NOT nested objects with "Name", "Macronutrients"
+5. **Validation**: If unsure, refer to the example format below and follow it EXACTLY. Do NOT deviate from the structure or field names under any circumstances.
+
+## EXAMPLE (MANDATORY REFERENCE)
 
 {{
   "recipes": [
     {{
-      "name": "Recipe Name",
-      "why_recommended": "One sentence matching user needs/conditions/available ingredients",
-      "servings": 2,
-      "prep_time": "15 minutes",
-      "cook_time": "20 minutes",
-      "ingredients": ["200g chicken breast", "150ml olive oil", "2 cloves garlic"],
-      "cook_instructions": "1. Preheat oven to 180°C.\\n2. Season chicken.\\n3. Bake 25 min.",
+      "name": "string",
+      "why_recommended": "string (max 150 chars)",
+      "servings": integer,
+      "prep_time": "X minutes",
+      "cook_time": "X minutes",
+      "ingredients": ["200g item1", "150ml item2"],
+      "cook_instructions": "1. Step\\n2. Step\\n3. Step",
       "nutrition": {{
-        "calories": 350,
-        "protein_g": 25,
-        "carbs_g": 30,
-        "fat_g": 12,
-        "fiber_g": 5,
-        "sodium_mg": 400,
-        "sugar_g": 3,
-        "saturated_fat_g": 2
+        "calories": integer,
+        "protein_g": float,
+        "carbs_g": float,
+        "fat_g": float,
+        "fiber_g": float,
+        "sodium_mg": integer,
+        "sugar_g": float,
+        "saturated_fat_g": float
       }}
     }}
   ]
 }}
 
 **Field Requirements:**
-- `name`: String (adapted recipe name, not original if modified)
-- `nutrition`: All values as numbers (integers for kcal/mg, floats for grams)
-- `ingredients`: Array of objects with `item` (string), `amount` (number), `unit` (string: "g", "ml", "piece")
-- `instructions`: Array of strings (numbered steps, include temperatures in °C)
-- `time`: All values as integers (minutes only)
+
+- **`name`**: String (adapted recipe name, not original if modified)
+- **`why_recommended`**: Single sentence explaining match to user requirements (max 150 characters)
+- **`servings`**: Integer (number of servings this recipe makes)
+- **`prep_time`**: String in format "X minutes" or "X hours Y minutes" (always include unit)
+- **`cook_time`**: String in format "X minutes" or "X hours Y minutes" (always include unit)
+- **`ingredients`**: Array of strings, each formatted as:
+  - Metric quantities: "200g chicken breast", "150ml olive oil"
+  - Whole items: "2 cloves garlic", "1 onion"
+  - Seasonings: "Salt to taste", "1 tsp pepper"
+- **`cook_instructions`**: Single string with numbered steps separated by `\\n` (newline character)
+  - Include temperatures in Celsius with unit: "180°C"
+  - Number each step: "1. ...", "2. ...", "3. ..."
+- **`nutrition`**: Object with numeric values:
+  - `calories`: Integer (kcal per serving)
+  - `protein_g`, `carbs_g`, `fat_g`, `fiber_g`, `sugar_g`, `saturated_fat_g`: Float (grams per serving)
+  - `sodium_mg`: Integer (milligrams per serving)
 
 **Validation Rules:**
-- All amounts MUST be in metric (g, ml, or piece)
-- All temperatures MUST be in Celsius (°C)
-- Never include imperial units in output
-- Never include null values (estimate if data missing)
-- Recipe count MUST match requested quantity (default 3)
+
+1. **Metric System ONLY**:
+   - Ingredients must use metric: "200g", "150ml" (never "1 cup", "2 tbsp")
+   - Temperatures in Celsius: "180°C" (never "350°F")
+   
+2. **String Formatting**:
+   - Time strings must include unit: "15 minutes" (not just "15")
+   - Instructions must use `\\n` between steps: "1. Step one\\n2. Step two"
+   - Ingredient strings must start with quantity: "200g chicken" (not "chicken 200g")
+
+3. **Completeness**:
+   - Never return null values (estimate if data missing)
+   - Recipe count MUST match requested quantity (default 3)
+   - All nutrition fields are required (if unknown, calculate from ingredients)
+
+4. **why_recommended Rules**:
+   - Must reference at least ONE user requirement (dietary restriction, nutrition goal, or available ingredient)
+   - Keep concise (one sentence, max 150 characters)
+   - Examples:
+     * "Vegetarian, high-protein meal under 500 calories using your spinach and tomatoes"
+     * "Gluten-free breakfast rich in fiber, matches your Italian cuisine preference"
 
 ---
 
@@ -876,11 +930,74 @@ Cholesterol: {row['cholesterol']} | Saturated Fat: {row['saturated_fat']}
 if __name__ == "__main__":
     from settings import DATA_DIR, RECIPES_NUTRITION_VECTOR_PATH, LLM_MODEL
 
+    # Configure logging to see debug output
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # Initialize RAG system
+    print("=" * 80)
+    print("Initializing RecipesNutritionRAG...")
+    print("=" * 80)
+    
     my_rag = RecipesNutritionRAG(
         data_folder=str(DATA_DIR),
         vectorstore_path=str(RECIPES_NUTRITION_VECTOR_PATH),
-        model_name=LLM_MODEL,
+        model_name="llama3:8b",
+        k=14,
+        temperature=0.3,
     )
+
+    # Override LLM with OpenAI GPT-4.1 BEFORE initialize()
+    my_rag.llm = ChatOpenAI(
+        model="gpt-4.1",
+        temperature=0.1,
+        api_key=OPENAI_API_KEY,
+    )
+
     my_rag.initialize()
-    answer = my_rag.ask("I'm vegetarian and need a recipe")
-    logger.info(answer)
+
+    # Override LLM again AFTER initialize() (because initialize() resets it)
+    my_rag.llm = ChatOpenAI(
+        model="gpt-4.1",
+        temperature=0.1,
+        api_key=OPENAI_API_KEY,
+    )
+
+    # Rebuild the chain with the new LLM
+    my_rag._build_chain()
+
+    print("✅ Using OpenAI GPT-4.1")
+    
+    # Test query
+    test_query = """USER REQUEST: I want something with Tofu and Rice
+DIETARY RESTRICTIONS: apples, vegetarian
+PREFERENCES: carrots
+NUTRITION GUIDELINES: General healthy Eating
+FOODS TO AVOID: Foods high in fat
+FOODS TO LIMIT: sugar
+INSTRUCTIONS: Tofu and Rice
+Based on the above, recommend specific safe and healthy food options.
+Include a brief nutritional breakdown for each."""
+
+    print("\n" + "=" * 80)
+    print("TEST QUERY:")
+    print("=" * 80)
+    print(test_query)
+    print("\n" + "=" * 80)
+    print("RAG RESPONSE:")
+    print("=" * 80)
+    
+    # Get answer
+    answer = my_rag.ask(test_query)
+    
+    # Print raw output
+    print("\n" + answer)
+    print("\n" + "=" * 80)
+    print("STATS:")
+    print("=" * 80)
+    stats = my_rag.get_stats()
+    for key, value in stats.items():
+        print(f"{key}: {value}")
+    print("=" * 80)
