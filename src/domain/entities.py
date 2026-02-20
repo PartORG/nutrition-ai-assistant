@@ -76,6 +76,7 @@ class RecipeHistory:
     id: Optional[int] = None
     user_id: Optional[int] = None
     recipe_id: Optional[int] = None
+    rating: Optional[int] = None
     recipe_name: str = ""
     servings: int = 0
     ingredients: str = ""
