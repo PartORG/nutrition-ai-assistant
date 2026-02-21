@@ -40,6 +40,7 @@ build/
 *.venv
 .env/
 .venv/
+!test_functionality/
 *.tox/
 .tox/
 *.coverage
