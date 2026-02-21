@@ -13,7 +13,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from langchain.schema import Document
 from langchain_community.document_loaders import PyPDFLoader
@@ -63,19 +63,29 @@ RULES:
         folder_paths: List[str],
         vectorstore_path: str,
         model_name: str = "llama3.2",
-        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
+        embedding_model: str = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1",
         temperature: float = 0.1,
         chunk_size: int = 300,
         chunk_overlap: int = 50,
         ollama_base_url: str = "http://localhost:11434/",
+        llm_provider: str = "ollama",
+        openai_api_key: Optional[str] = None,
+        groq_api_key: Optional[str] = None,
     ):
+        # Only Ollama uses the native format="json" parameter.
+        # Cloud providers (Groq, OpenAI) rely on the prompt for JSON output.
+        llm_format = "json" if llm_provider == "ollama" else None
+
         super().__init__(
             embedding_model=embedding_model,
             vectorstore_path=vectorstore_path,
             model_name=model_name,
             temperature=temperature,
-            llm_format="json",
+            llm_format=llm_format,
             ollama_base_url=ollama_base_url,
+            llm_provider=llm_provider,
+            openai_api_key=openai_api_key,
+            groq_api_key=groq_api_key,
         )
         self.folder_paths = folder_paths if isinstance(folder_paths, list) else [folder_paths]
         self.chunk_size = chunk_size

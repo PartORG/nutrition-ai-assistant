@@ -83,13 +83,23 @@ Context: {context}"""
         temperature: float = 0.3,
         k: int = 14,
         ollama_base_url: str = "http://localhost:11434/",
+        llm_provider: str = "ollama",
+        openai_api_key: Optional[str] = None,
+        groq_api_key: Optional[str] = None,
     ):
+        # Only Ollama uses the native format="json" parameter.
+        # Cloud providers (Groq, OpenAI) rely on the prompt for JSON output.
+        llm_format = "json" if llm_provider == "ollama" else None
+
         super().__init__(
             vectorstore_path=vectorstore_path,
             model_name=model_name,
             temperature=temperature,
             ollama_base_url=ollama_base_url,
-            llm_format="json",  # enforce structured JSON output
+            llm_format=llm_format,
+            llm_provider=llm_provider,
+            openai_api_key=openai_api_key,
+            groq_api_key=groq_api_key,
         )
         self.data_folder = Path(data_folder)
         self.k = k
