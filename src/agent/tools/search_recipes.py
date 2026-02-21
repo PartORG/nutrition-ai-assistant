@@ -54,6 +54,7 @@ class SearchRecipesTool(BaseTool):
         """
         # Prefer the original user message stored by AgentExecutor.run()
         actual_query = ctx.scratch.get("original_query") or query
+        print(f"[SearchRecipesTool] Using original user query: '{actual_query}'")
         result = await self._service.get_recommendations(ctx, actual_query)
 
         safe_recipes = result.safe_recipes
