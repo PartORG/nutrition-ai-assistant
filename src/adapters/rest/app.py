@@ -57,13 +57,13 @@ app.add_middleware(
 )
 
 # Register routers
-app.include_router(auth.router)
-app.include_router(recommendations.router)
-app.include_router(conversations.router)
-app.include_router(profile.router)
-app.include_router(images.router)
-app.include_router(chat_ws.router)
-app.include_router(analytics.router)
+app.include_router(auth.router, prefix="/api")
+app.include_router(recommendations.router, prefix="/api")
+app.include_router(conversations.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
+app.include_router(images.router, prefix="/api")
+app.include_router(chat_ws.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])

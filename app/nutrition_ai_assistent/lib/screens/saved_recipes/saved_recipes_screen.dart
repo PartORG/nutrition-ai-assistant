@@ -27,12 +27,14 @@ class _SavedRecipesScreenState extends State<SavedRecipesScreen> {
       _error = null;
     });
     try {
-      final data = await AppServices.instance.api.get('/dashboard')
-          as Map<String, dynamic>;
+      final data =
+          await AppServices.instance.api.get('/dashboard')
+              as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
         _recipes = List<Map<String, dynamic>>.from(
-            data['recent_recipes'] as List? ?? []);
+          data['recent_recipes'] as List? ?? [],
+        );
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -79,25 +81,22 @@ class _SavedRecipesScreenState extends State<SavedRecipesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _ErrorView(message: _error!, onRetry: _loadRecipes)
-              : _recipes.isEmpty
-                  ? _EmptyView(
-                      icon: Icons.bookmark_border,
-                      title: 'No saved recipes yet',
-                      subtitle:
-                          'Ask NutriAI to suggest recipes and save them',
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadRecipes,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _recipes.length,
-                        itemBuilder: (context, i) => _RecipeCard(
-                          recipe: _recipes[i],
-                          formatDate: _formatDate,
-                        ),
-                      ),
-                    ),
+          ? _ErrorView(message: _error!, onRetry: _loadRecipes)
+          : _recipes.isEmpty
+          ? _EmptyView(
+              icon: Icons.bookmark_border,
+              title: 'No saved recipes yet',
+              subtitle: 'Ask NutriAI to suggest recipes and save them',
+            )
+          : RefreshIndicator(
+              onRefresh: _loadRecipes,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _recipes.length,
+                itemBuilder: (context, i) =>
+                    _RecipeCard(recipe: _recipes[i], formatDate: _formatDate),
+              ),
+            ),
     );
   }
 }
@@ -115,6 +114,20 @@ class _RecipeCard extends StatefulWidget {
 
 class _RecipeCardState extends State<_RecipeCard> {
   bool _expanded = false;
+  double _rating = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _rating = (widget.recipe['rating'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  void _setRating(double rating) {
+    setState(() {
+      _rating = rating;
+      widget.recipe['rating'] = rating;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +146,11 @@ class _RecipeCardState extends State<_RecipeCard> {
     final servings = recipe['servings'] as int?;
 
     final ingredients = ingredientsRaw.isNotEmpty
-        ? ingredientsRaw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+        ? ingredientsRaw
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
         : <String>[];
     final hasDetails = ingredients.isNotEmpty || instructions.isNotEmpty;
 
@@ -156,8 +173,11 @@ class _RecipeCardState extends State<_RecipeCard> {
                       color: AppColors.cardGreen,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.restaurant_menu,
-                        color: AppColors.primary, size: 22),
+                    child: const Icon(
+                      Icons.restaurant_menu,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -167,16 +187,61 @@ class _RecipeCardState extends State<_RecipeCard> {
                         Text(
                           name,
                           style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                         if (savedAt.isNotEmpty)
                           Text(
                             'Saved ${widget.formatDate(savedAt)}',
                             style: const TextStyle(
-                                fontSize: 12, color: Colors.grey),
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
                           ),
                       ],
                     ),
+                  ),
+                  // ── Star Rating (Right side) ───────────────────────────────
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ...[1, 2, 3, 4, 5]
+                              .map(
+                                (star) => GestureDetector(
+                                  onTap: () => _setRating(star.toDouble()),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 1,
+                                    ),
+                                    child: Icon(
+                                      star <= _rating
+                                          ? Icons.star
+                                          : Icons.star_outline,
+                                      color: star <= _rating
+                                          ? Colors.amber
+                                          : Colors.grey,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ],
+                      ),
+                      if (_rating > 0)
+                        Text(
+                          '${_rating.toStringAsFixed(1)}/5',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.amber,
+                          ),
+                        ),
+                    ],
                   ),
                   if (hasDetails)
                     Icon(
@@ -193,8 +258,10 @@ class _RecipeCardState extends State<_RecipeCard> {
 
                 // ── Calorie badge ────────────────────────────────────────────
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -202,8 +269,11 @@ class _RecipeCardState extends State<_RecipeCard> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.local_fire_department,
-                          color: AppColors.primary, size: 16),
+                      const Icon(
+                        Icons.local_fire_department,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         '${kcal.toStringAsFixed(0)} kcal',
@@ -221,32 +291,42 @@ class _RecipeCardState extends State<_RecipeCard> {
                 // ── Macro bars ───────────────────────────────────────────────
                 if (protein != null)
                   _MacroBar(
-                      label: 'Protein',
-                      grams: protein,
-                      color: AppColors.primary),
+                    label: 'Protein',
+                    grams: protein,
+                    color: AppColors.primary,
+                  ),
                 if (carbs != null)
                   _MacroBar(label: 'Carbs', grams: carbs, color: Colors.orange),
                 if (fat != null)
                   _MacroBar(
-                      label: 'Fat', grams: fat, color: Colors.blue.shade300),
+                    label: 'Fat',
+                    grams: fat,
+                    color: Colors.blue.shade300,
+                  ),
                 if (fiber != null && fiber > 0)
                   _MacroBar(
-                      label: 'Fiber',
-                      grams: fiber,
-                      color: Colors.green.shade400),
+                    label: 'Fiber',
+                    grams: fiber,
+                    color: Colors.green.shade400,
+                  ),
 
                 // ── Sodium note ──────────────────────────────────────────────
                 if (sodium != null && sodium > 0) ...[
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.water_drop_outlined,
-                          size: 14, color: Colors.grey),
+                      const Icon(
+                        Icons.water_drop_outlined,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         'Sodium: ${sodium.toStringAsFixed(0)} mg',
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),
@@ -270,24 +350,38 @@ class _RecipeCardState extends State<_RecipeCard> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.timer_outlined,
-                                  size: 14, color: Colors.grey),
+                              const Icon(
+                                Icons.timer_outlined,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               const SizedBox(width: 4),
-                              Text(prepTime,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.grey)),
+                              Text(
+                                prepTime,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
                             ],
                           ),
                         if (servings != null && servings > 0)
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.people_outline,
-                                  size: 14, color: Colors.grey),
+                              const Icon(
+                                Icons.people_outline,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               const SizedBox(width: 4),
-                              Text('$servings servings',
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.grey)),
+                              Text(
+                                '$servings servings',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
                             ],
                           ),
                       ],
@@ -296,36 +390,48 @@ class _RecipeCardState extends State<_RecipeCard> {
 
                 // Ingredients
                 if (ingredients.isNotEmpty) ...[
-                  const Text('Ingredients',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text(
+                    'Ingredients',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
                   const SizedBox(height: 6),
-                  ...ingredients.map((ing) => Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('• ',
-                                style: TextStyle(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.bold)),
-                            Expanded(
-                                child: Text(ing,
-                                    style: const TextStyle(fontSize: 13))),
-                          ],
-                        ),
-                      )),
+                  ...ingredients.map(
+                    (ing) => Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '• ',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              ing,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 10),
                 ],
 
                 // Instructions
                 if (instructions.isNotEmpty) ...[
-                  const Text('Instructions',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text(
+                    'Instructions',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
                   const SizedBox(height: 6),
-                  Text(instructions,
-                      style: const TextStyle(fontSize: 13, height: 1.5)),
+                  Text(
+                    instructions,
+                    style: const TextStyle(fontSize: 13, height: 1.5),
+                  ),
                 ],
               ],
             ],
@@ -342,8 +448,11 @@ class _MacroBar extends StatelessWidget {
   final double grams;
   final Color color;
 
-  const _MacroBar(
-      {required this.label, required this.grams, required this.color});
+  const _MacroBar({
+    required this.label,
+    required this.grams,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -351,36 +460,27 @@ class _MacroBar extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Container(
-              width: 10,
-              height: 10,
-              decoration:
-                  BoxDecoration(color: color, shape: BoxShape.circle)),
-          const SizedBox(width: 8),
           SizedBox(
-              width: 58,
-              child: Text(label, style: const TextStyle(fontSize: 13))),
+            width: 60,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
-                // Scale bar to a rough reference maximum of 150 g
                 value: (grams / 150).clamp(0.0, 1.0),
-                backgroundColor: Colors.grey[200],
+                minHeight: 6,
                 color: color,
-                minHeight: 8,
               ),
             ),
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 52,
-            child: Text(
-              '${grams.toStringAsFixed(1)} g',
-              style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.right,
-            ),
+          Text(
+            '${grams.toStringAsFixed(1)} g',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -392,6 +492,7 @@ class _MacroBar extends StatelessWidget {
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
+
   const _ErrorView({required this.message, required this.onRetry});
 
   @override
@@ -400,15 +501,11 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
+          Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
           const SizedBox(height: 16),
           Text(message, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-          ),
+          ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
     );
@@ -419,8 +516,12 @@ class _EmptyView extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  const _EmptyView(
-      {required this.icon, required this.title, required this.subtitle});
+
+  const _EmptyView({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -430,11 +531,16 @@ class _EmptyView extends StatelessWidget {
         children: [
           Icon(icon, size: 64, color: Colors.grey[300]),
           const SizedBox(height: 16),
-          Text(title,
-              style: TextStyle(color: Colors.grey[500], fontSize: 16)),
-          const SizedBox(height: 6),
-          Text(subtitle,
-              style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey),
+          ),
         ],
       ),
     );

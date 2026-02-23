@@ -1,6 +1,8 @@
 """Protected profile endpoint."""
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+import asyncio
 
 from factory import ServiceFactory
 from adapters.rest.dependencies import get_factory, get_current_user, CurrentUser, build_session_ctx
@@ -9,7 +11,20 @@ from adapters.rest.schemas import ProfileOut, MedicalAdviceOut, UserOut
 router = APIRouter(tags=["profile"])
 
 
-@router.get("/profile")
+class UserUpdateRequest(BaseModel):
+    """Request body for updating user profile."""
+    name: str
+    age: int
+    gender: str
+    caretaker: str
+
+
+async def _gather(*coros):
+    """Run multiple coroutines concurrently."""
+    return await asyncio.gather(*coros)
+
+
+@router.get("")
 async def get_profile(
     user: CurrentUser = Depends(get_current_user),
     factory: ServiceFactory = Depends(get_factory),
@@ -55,7 +70,40 @@ async def get_profile(
     }
 
 
-async def _gather(*coros):
-    """Run multiple coroutines concurrently."""
-    import asyncio
-    return await asyncio.gather(*coros)
+@router.post("/update")
+async def update_profile(
+    data: UserUpdateRequest,
+    user: CurrentUser = Depends(get_current_user),
+    factory: ServiceFactory = Depends(get_factory),
+):
+    """Update user profile information."""
+    print(f"🔵 Backend: Received update request for user {user.user_id}")
+    print(f"🔵 Backend: Data = {data}")
+    
+    user_repo = factory.create_user_repository()
+    
+    # Update user entity
+    user_entity = await user_repo.get_by_id(user.user_id)
+    if not user_entity:
+        print(f"🔵 Backend: User not found")
+        return {"error": "User not found"}, 404
+    
+    user_entity.name = data.name
+    user_entity.age = data.age
+    user_entity.gender = data.gender
+    user_entity.caretaker = data.caretaker
+    
+    await user_repo.update(user_entity)
+    print(f"🔵 Backend: User updated successfully")
+    
+    return {
+        "message": "Profile updated successfully",
+        "user": UserOut(
+            name=user_entity.name,
+            surname=user_entity.surname,
+            user_name=user_entity.user_name,
+            age=user_entity.age,
+            gender=user_entity.gender,
+            caretaker=user_entity.caretaker,
+        )
+    }

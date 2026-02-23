@@ -13,14 +13,14 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     # Add this section to enable GPU support
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1 # Number of GPUs to use, or use 'all'
-              capabilities: [gpu]
-    restart: unless-stopped
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1 # Number of GPUs to use, or use 'all'
+    #           capabilities: [gpu]
+    # restart: unless-stopped
 
   # ── 2. YOLO Detector ──────────────────────────────────────────────────────
   # Isolated Python environment with ultralytics, opencv-python-headless, torch.
