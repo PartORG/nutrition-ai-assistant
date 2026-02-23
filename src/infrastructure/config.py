@@ -77,6 +77,9 @@ class Settings:
     @classmethod
     def from_env(cls, project_root: Optional[Path] = None) -> Settings:
         """Build Settings from standard project layout."""
+        from dotenv import load_dotenv
+        load_dotenv()
+
         root = project_root or Path(__file__).resolve().parent.parent.parent
         
         # Get API keys from environment
