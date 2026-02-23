@@ -65,6 +65,7 @@ _TABLES = [
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         recipe_id INTEGER,
+        rating INTEGER,
         recipe_name TEXT,
         cook_instructions TEXT,
         servings INTEGER,

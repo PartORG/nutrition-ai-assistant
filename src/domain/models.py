@@ -134,6 +134,7 @@ class Recipe:
     servings: int = 0
     prep_time: str = ""
     cook_instructions: str = ""
+    rating: Optional[int] = None    # 1-5 user rating, if available
 
 
 # ---------------------------------------------------------------------------
