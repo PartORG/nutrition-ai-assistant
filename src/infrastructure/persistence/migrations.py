@@ -118,6 +118,18 @@ _TABLES = [
 ]
 
 
+async def _add_column_if_missing(
+    conn, table: str, column: str, col_type: str
+) -> None:
+    """Add a column to *table* unless it already exists."""
+    cursor = await conn.execute(f"PRAGMA table_info({table})")
+    rows = await cursor.fetchall()
+    existing = {row[1] for row in rows}  # row[1] = column name
+    if column not in existing:
+        await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        logger.info("Added missing column '%s' to table '%s'.", column, table)
+
+
 async def run_migrations(connection: AsyncSQLiteConnection) -> None:
     """Create all tables if they don't exist.
 
@@ -126,4 +138,11 @@ async def run_migrations(connection: AsyncSQLiteConnection) -> None:
     async with connection.acquire() as conn:
         for ddl in _TABLES:
             await conn.execute(ddl)
+
+        # ------------------------------------------------------------------
+        # Incremental schema patches (for databases created before a column
+        # was introduced).
+        # ------------------------------------------------------------------
+        await _add_column_if_missing(conn, "recipe_history", "rating", "INTEGER")
+
     logger.info("All tables created (or already exist).")
