@@ -44,11 +44,6 @@ class ApiService {
     final headers = auth
         ? await _authHeaders()
         : {'Content-Type': 'application/json'};
-    
-    print('🔵 POST $path');
-    print('🔵 Headers: $headers');
-    print('🔵 Body: $body');
-    
     final response = await http
         .post(
           Uri.parse('$baseUrl$path'),
@@ -56,10 +51,6 @@ class ApiService {
           body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 30));
-    
-    print('🔵 Response status: ${response.statusCode}');
-    print('🔵 Response body: ${response.body}');
-    
     return _handle(response);
   }
 

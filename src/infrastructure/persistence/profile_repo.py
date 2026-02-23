@@ -42,6 +42,16 @@ class SQLiteProfileRepository:
             )
             return [self._row_to_profile(r) for r in rows]
 
+    async def update_field(self, profile_id: int, field: str, value: str) -> None:
+        allowed_fields = {"preferences", "health_condition", "restrictions"}
+        if field not in allowed_fields:
+            raise ValueError(f"Invalid field '{field}'. Allowed: {allowed_fields}")
+        async with self._conn.acquire() as conn:
+            await conn.execute(
+                f"UPDATE user_profile_history SET {field} = ?, updated_at = ? WHERE id = ?",
+                (value, datetime.now().isoformat(), profile_id),
+            )
+
     async def soft_delete(self, history_id: int) -> None:
         async with self._conn.acquire() as conn:
             await conn.execute(

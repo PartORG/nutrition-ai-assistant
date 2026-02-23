@@ -9,7 +9,7 @@ class AuthService {
   AuthService(this._api, this._storage);
 
   Future<void> login(String username, String password) async {
-    final data = await _api.post('/auth/login', {
+    final data = await _api.post('/api/auth/login', {
       'login': username,
       'password': password,
     });
@@ -30,7 +30,7 @@ class AuthService {
     String caretaker = '',
     String healthCondition = '',
   }) async {
-    final data = await _api.post('/auth/register', {
+    final data = await _api.post('/api/auth/register', {
       'name': name,
       'surname': surname,
       'login': username,
