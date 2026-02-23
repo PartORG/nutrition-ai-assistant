@@ -1,12 +1,9 @@
 """
-infrastructure.llm.safety_filter - Multi-provider recipe safety validation.
+infrastructure.llm.safety_filter - Ollama-based recipe safety validation.
 
 Implements SafetyFilterPort using a hybrid approach:
     1. Rule-based checks (avoid-lists, dietary restrictions, nutrition limits)
     2. LLM semantic check (catch subtle issues like "prosciutto is pork")
-
-The LLM provider (openai / groq / ollama) is controlled by the
-centralized LLM_PROVIDER setting.
 
 Receives pre-parsed list[Recipe] objects from RecipeRAG (no LLM re-parsing needed).
 """
@@ -21,6 +18,7 @@ from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_ollama import OllamaLLM
 
 from domain.models import (
     UserIntent,
@@ -33,7 +31,6 @@ from domain.models import (
     SafetyCheckResult,
 )
 from domain.exceptions import SafetyCheckError
-from infrastructure.llm.llm_builder import build_llm
 
 logger = logging.getLogger(__name__)
 
@@ -71,28 +68,23 @@ RESTRICTION_INGREDIENT_MAP: dict[str, list[str]] = {
 }
 
 
+
 class SafetyFilter:
     """Implements SafetyFilterPort using any supported LLM provider + rule-based checks."""
 
+
     def __init__(
         self,
-        *,
-        provider: str = "ollama",
-        model: str = "llama3.2",
+        model_name: str = "llama3.2",
         ollama_base_url: str = "http://localhost:11434/",
-        openai_api_key: str = "",
-        groq_api_key: str = "",
         debug: bool = False,
     ):
         self._debug = debug
-        self._llm = build_llm(
-            provider=provider,
-            model=model,
+        self._llm = OllamaLLM(
+            model=model_name,
             temperature=0,
-            json_mode=True,
-            ollama_base_url=ollama_base_url,
-            openai_api_key=openai_api_key,
-            groq_api_key=groq_api_key,
+            format="json",
+            base_url=ollama_base_url,
         )
         self._parser = JsonOutputParser()
         self._check_chain = self._build_check_chain()
@@ -129,7 +121,7 @@ class SafetyFilter:
         for recipe in recipes:
             issues: list[SafetyIssue] = []
             issues.extend(self._check_ingredients(recipe.ingredients, avoid_foods, restrictions))
-            issues.extend(self._check_nutrition(recipe.nutrition, constraint_rules))
+            issues.extend(self._check_nutrition(recipe.nutrition, constraint_rules, servings=recipe.servings))
             rule_issues_per_recipe.append(issues)
 
         # Step 3: LLM semantic check
@@ -281,12 +273,22 @@ Return ONLY valid JSON."""
 
         return issues
 
+    # DEF _CHECK_NUTRITION: 
+    # | Task   | What is divided?            | Meaning                            |
+    # | ------ | --------------------------- | ---------------------------------- |
+    # | TASK 1 | Nutrition limit (`max_val`) | Convert daily → per meal           |
+    # | TASK 2 | Nutrition value (`value`)   | Convert total recipe → per serving |
+    # | TASK 3 | Interpretation change       | Treat constraints as daily         |
+
     def _check_nutrition(
         self,
         nutrition: NutritionValues,
         constraint_rules: dict[str, dict[str, float | None]],
+        servings: int | None = None,            # Future: adjust per-serving if servings provided
     ) -> list[SafetyIssue]:
+        
         issues: list[SafetyIssue] = []
+
         field_map: dict[str, float | None] = {
             "sugar_g": nutrition.sugar_g,
             "sodium_mg": nutrition.sodium_mg,
@@ -302,24 +304,37 @@ Return ONLY valid JSON."""
             value = field_map.get(nutrient)
             if value is None:
                 continue
+
+            # TASK 2: Take servings into account
+            if servings and servings > 0:       # Avoid division by zero
+                value = value / servings        # Assuming input nutrition is total for the recipe, convert to per-serving for checks
+
             max_val = rule.get("max")
             min_val = rule.get("min")
-            if max_val is not None and value > max_val:
-                issues.append(SafetyIssue(
-                    category="nutrition_limit",
-                    severity="medium",
-                    description=f"{nutrient} ({value}) exceeds maximum ({max_val})",
-                    detail=f"{nutrient}: {value} > max {max_val}",
-                ))
-            if min_val is not None and value < min_val:
-                issues.append(SafetyIssue(
-                    category="nutrition_limit",
-                    severity="medium",
-                    description=f"{nutrient} ({value}) below minimum ({min_val})",
-                    detail=f"{nutrient}: {value} < min {min_val}",
-                ))
 
-        return issues
+            # Assume daily constraints → convert to per-meal (1/3 of daily)
+            if max_val is not None:     # If there's a max constraint, apply it as a per-meal limit (1/3 of daily)
+                # TASK 1: Divide each nutrition value by 3
+                allowed_max = max_val / 3       # Future: could be smarter about meal distribution (e.g., more calories at dinner), but 1/3 is a simple heuristic
+                if value > allowed_max:         # If the recipe exceeds the per-meal limit, flag it (medium severity since it's not an outright violation, but a concern)
+                    issues.append(SafetyIssue(          # Note: we use "medium" severity here to indicate it's a concern but not necessarily a critical violation, since it's based on a heuristic per-meal limit rather than an absolute max for the recipe.
+                        category="nutrition_limit",         # In the future, we could have more nuanced categories like "nutrition_excess" vs "nutrition_deficiency"
+                        severity="medium",                  # This is a judgment call — we want to flag it as a concern, but not necessarily reject the recipe outright, since it's based on a heuristic per-meal limit rather than an absolute max for the recipe. In a future iteration, we could consider making this "high" severity if it exceeds the daily max (without dividing by 3), and "medium" if it exceeds the per-meal heuristic.
+                        description=f"{nutrient} per serving ({value:.2f}) exceeds per-meal limit ({allowed_max:.2f})",         # The description is human-readable and explains the concern clearly.
+                        detail=f"{nutrient}: {value:.2f} > allowed {allowed_max:.2f}",      # The detail provides the specific values for debugging and transparency.
+                    ))
+
+            if min_val is not None:         # If there's a min constraint, we can also check if the recipe is too low in that nutrient (e.g., protein for a high-protein requirement). We can apply a similar per-meal heuristic (1/3 of daily minimum) for this as well.
+                # TASK 1: Divide each nutrition value by 3
+                required_min = min_val / 3          
+                if value < required_min:            
+                    issues.append(SafetyIssue(          
+                        category="nutrition_limit",             
+                        severity="medium",                      
+                        description=f"{nutrient} per serving ({value:.2f}) below per-meal minimum ({required_min:.2f})",
+                        detail=f"{nutrient}: {value:.2f} < required {required_min:.2f}",
+                    ))
+        return issues              
 
     def _llm_semantic_check(
         self,
