@@ -71,10 +71,6 @@ RESTRICTION_INGREDIENT_MAP: dict[str, list[str]] = {
 }
 
 
-# Backward-compatible alias (so old imports still work)
-OllamaSafetyFilter = SafetyFilter
-
-
 class SafetyFilter:
     """Implements SafetyFilterPort using any supported LLM provider + rule-based checks."""
 
@@ -418,3 +414,7 @@ Return ONLY valid JSON."""
             parts.append("\n".join(lines))
 
         return "\n\n---\n\n".join(parts)
+
+
+# Backward-compatible alias (so old imports still work)
+OllamaSafetyFilter = SafetyFilter

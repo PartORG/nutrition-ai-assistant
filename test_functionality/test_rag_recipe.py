@@ -48,7 +48,14 @@ async def main():
     await ensure_dummy_user(factory, user_id=1)
     ctx = SessionContext(user_id=1, conversation_id="test_convo_1", user_data={"name": "Test User"})
     rag = factory._recipe_rag
-    query = "Healthy vegan breakfast recipes"  # Modify this string to test other queries
+    query = """USER REQUEST: I want something with Tofu and Rice
+DIETARY RESTRICTIONS: apples, vegetarian
+PREFERENCES: carrots
+NUTRITION GUIDELINES: General healthy Eating
+FOODS TO AVOID: Foods high in fat
+FOODS TO LIMIT: sugar
+INSTRUCTIONS: Tofu and Rice
+"""  # Modify this string to test other queries
     results = await rag.async_ask(query)
     print("Recipe RAG Results:", results)
 
