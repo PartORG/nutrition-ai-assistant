@@ -178,10 +178,6 @@ Output: {{
 REMEMBER: Empty string "" for any field not explicitly mentioned!"""
 
 
-# Backward-compatible alias (so old imports still work)
-OllamaIntentParser = IntentParser
-
-
 class IntentParser:
     """Implements IntentParserPort using any supported LLM provider.
 
@@ -246,3 +242,7 @@ def _split_csv(value: str) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+# Backward-compatible alias (so old imports still work)
+OllamaIntentParser = IntentParser
