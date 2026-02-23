@@ -1,13 +1,15 @@
 """
-infrastructure.llm.intent_parser - Ollama-based intent extraction.
+infrastructure.llm.intent_parser - Multi-provider intent extraction.
 
-Implements IntentParserPort using LangChain + OllamaLLM.
+Implements IntentParserPort using LangChain.
+The LLM provider (openai / groq / ollama) is controlled by the
+centralized LLM_PROVIDER setting.
+
 Migrated from components/intent_retriever.py with these changes:
     - UserIntent dataclass moved to domain/models.py
     - Fields now use list[str] instead of comma-separated strings
     - parse() is async (wraps sync chain in run_in_executor)
-    - No sys.path.insert hack
-    - No if __name__ == "__main__" block
+    - Supports openai, groq, and ollama providers
 """
 
 from __future__ import annotations
@@ -18,10 +20,10 @@ from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_ollama import OllamaLLM
 
 from domain.models import UserIntent
 from domain.exceptions import IntentParsingError
+from infrastructure.llm.llm_builder import build_llm
 
 logger = logging.getLogger(__name__)
 
@@ -176,8 +178,12 @@ Output: {{
 REMEMBER: Empty string "" for any field not explicitly mentioned!"""
 
 
-class OllamaIntentParser:
-    """Implements IntentParserPort using Ollama LLM with JSON output.
+# Backward-compatible alias (so old imports still work)
+OllamaIntentParser = IntentParser
+
+
+class IntentParser:
+    """Implements IntentParserPort using any supported LLM provider.
 
     The LLM returns comma-separated strings which are split into list[str]
     to match the domain model.
@@ -185,14 +191,21 @@ class OllamaIntentParser:
 
     def __init__(
         self,
-        model_name: str = "llama3.2",
+        *,
+        provider: str = "ollama",
+        model: str = "llama3.2",
         ollama_base_url: str = "http://localhost:11434/",
+        openai_api_key: str = "",
+        groq_api_key: str = "",
     ):
-        self._llm = OllamaLLM(
-            model=model_name,
+        self._llm = build_llm(
+            provider=provider,
+            model=model,
             temperature=0,
-            format="json",
-            base_url=ollama_base_url,
+            json_mode=True,
+            ollama_base_url=ollama_base_url,
+            openai_api_key=openai_api_key,
+            groq_api_key=groq_api_key,
         )
         self._parser = JsonOutputParser()
         self._chain = self._build_chain()
