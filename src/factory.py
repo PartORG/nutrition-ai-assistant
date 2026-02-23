@@ -42,8 +42,8 @@ from infrastructure.persistence.conversation_repo import SQLiteConversationRepos
 from infrastructure.persistence.chat_message_repo import SQLiteChatMessageRepository
 from infrastructure.persistence.auth_repo import SQLiteAuthenticationRepository
 from infrastructure.persistence.analytics_repo import SQLiteAnalyticsRepository
-from infrastructure.llm.intent_parser import OllamaIntentParser
-from infrastructure.llm.safety_filter import OllamaSafetyFilter
+from infrastructure.llm.intent_parser import IntentParser
+from infrastructure.llm.safety_filter import SafetyFilter
 from infrastructure.rag.medical_rag import MedicalRAG
 from infrastructure.rag.recipe_rag import RecipeNutritionRAG
 from infrastructure.cnn.ingredient_detector import LLaVAIngredientDetector
@@ -87,8 +87,8 @@ class ServiceFactory:
         self._medical_rag: Optional[MedicalRAG] = None
         self._recipe_rag: Optional[RecipeNutritionRAG] = None
         self._agent_llm = None
-        self._intent_parser: Optional[OllamaIntentParser] = None
-        self._safety_filter: Optional[OllamaSafetyFilter] = None
+        self._intent_parser: Optional[IntentParser] = None
+        self._safety_filter: Optional[SafetyFilter] = None
         self._image_detector = None
 
         self._initialized = False
@@ -104,13 +104,20 @@ class ServiceFactory:
         logger.info("Database migrations complete")
 
         # ── Build shared LLM-backed components ONCE ──────────────────
-        self._intent_parser = OllamaIntentParser(
-            model_name=self._config.llm_model,
-            ollama_base_url=self._config.ollama_base_url,
+        cfg = self._config
+        self._intent_parser = IntentParser(
+            provider=cfg.llm_provider,
+            model=cfg.active_llm_model,
+            ollama_base_url=cfg.ollama_base_url,
+            openai_api_key=cfg.openai_api_key,
+            groq_api_key=cfg.groq_api_key,
         )
-        self._safety_filter = OllamaSafetyFilter(
-            model_name=self._config.llm_model,
-            ollama_base_url=self._config.ollama_base_url,
+        self._safety_filter = SafetyFilter(
+            provider=cfg.llm_provider,
+            model=cfg.active_llm_model,
+            ollama_base_url=cfg.ollama_base_url,
+            openai_api_key=cfg.openai_api_key,
+            groq_api_key=cfg.groq_api_key,
         )
         self._agent_llm = self._build_agent_llm()
         self._image_detector = self._build_image_detector()
@@ -118,34 +125,34 @@ class ServiceFactory:
 
         # Initialize Medical RAG with configured provider
         self._medical_rag = MedicalRAG(
-            folder_paths=[str(self._config.pdf_dir)],
-            model_name=self._config.rag_llm_model,
-            vectorstore_path=str(self._config.medical_vectorstore_path),
-            ollama_base_url=self._config.ollama_base_url,
-            llm_provider=self._config.rag_llm_provider,
-            openai_api_key=self._config.openai_api_key,
-            groq_api_key=self._config.groq_api_key,
+            folder_paths=[str(cfg.pdf_dir)],
+            model_name=cfg.active_llm_model,
+            vectorstore_path=str(cfg.medical_vectorstore_path),
+            ollama_base_url=cfg.ollama_base_url,
+            llm_provider=cfg.llm_provider,
+            openai_api_key=cfg.openai_api_key,
+            groq_api_key=cfg.groq_api_key,
         )
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None, self._medical_rag.initialize, False,
         )
-        logger.info("Medical RAG initialized (provider=%s)", self._config.rag_llm_provider)
+        logger.info("Medical RAG initialized (provider=%s)", cfg.llm_provider)
 
         # Initialize Recipe RAG with configured provider
         self._recipe_rag = RecipeNutritionRAG(
-            data_folder=str(self._config.data_dir),
-            model_name=self._config.rag_llm_model,
-            vectorstore_path=str(self._config.recipes_nutrition_vector_path),
-            ollama_base_url=self._config.ollama_base_url,
-            llm_provider=self._config.rag_llm_provider,
-            openai_api_key=self._config.openai_api_key,
-            groq_api_key=self._config.groq_api_key,
+            data_folder=str(cfg.data_dir),
+            model_name=cfg.active_llm_model,
+            vectorstore_path=str(cfg.recipes_nutrition_vector_path),
+            ollama_base_url=cfg.ollama_base_url,
+            llm_provider=cfg.llm_provider,
+            openai_api_key=cfg.openai_api_key,
+            groq_api_key=cfg.groq_api_key,
         )
         await loop.run_in_executor(
             None, self._recipe_rag.initialize,
         )
-        logger.info("Recipe RAG initialized (provider=%s)", self._config.rag_llm_provider)
+        logger.info("Recipe RAG initialized (provider=%s)", cfg.llm_provider)
 
         self._initialized = True
         logger.info("ServiceFactory ready")
@@ -275,32 +282,21 @@ class ServiceFactory:
 
     def _build_agent_llm(self):
         """Build the LLM for the conversational agent (called once during init)."""
-        provider = self._config.agent_llm_provider
-        if provider == "groq":
-            from langchain_groq import ChatGroq
-            logger.info("Agent LLM: Groq (%s)", self._config.agent_llm_model)
-            return ChatGroq(
-                model=self._config.agent_llm_model,
-                temperature=0,
-                groq_api_key=self._config.groq_api_key,
-                max_tokens=512,
-            )
-        elif provider == "openai":
-            from langchain_openai import ChatOpenAI
-            logger.info("Agent LLM: OpenAI (%s)", self._config.agent_llm_model_openai)
-            return ChatOpenAI(
-                model=self._config.agent_llm_model_openai,
-                temperature=0,
-                openai_api_key=self._config.openai_api_key,
-            )
-        else:
-            from langchain_ollama import ChatOllama
-            logger.info("Agent LLM: Ollama (%s)", self._config.agent_llm_model)
-            return ChatOllama(
-                model=self._config.agent_llm_model,
-                temperature=0,
-                base_url=self._config.ollama_base_url,
-            )
+        from infrastructure.llm.llm_builder import build_llm
+
+        cfg = self._config
+        logger.info(
+            "Agent LLM: %s (%s)", cfg.llm_provider, cfg.active_llm_model,
+        )
+        return build_llm(
+            provider=cfg.llm_provider,
+            model=cfg.active_llm_model,
+            temperature=0,
+            ollama_base_url=cfg.ollama_base_url,
+            openai_api_key=cfg.openai_api_key,
+            groq_api_key=cfg.groq_api_key,
+            chat_model=True,   # agent needs ChatModel for tool calling
+        )
 
     def _build_image_detector(self):
         """Build the ingredient detector (called once during init)."""

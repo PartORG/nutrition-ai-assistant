@@ -17,13 +17,12 @@ from langchain.schema import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
-from langchain_ollama import OllamaLLM
-from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
 from langchain_core.language_models import BaseChatModel
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
+
+from infrastructure.llm.llm_builder import build_llm as _build_llm_central
 
 logger = logging.getLogger(__name__)
 
@@ -129,49 +128,21 @@ class BaseRAG(ABC):
     def _build_llm(self) -> BaseChatModel:
         """Build the LLM based on the configured provider.
         
+        Delegates to the centralized llm_builder so that provider logic
+        lives in exactly one place.
+        
         Returns:
-            BaseChatModel instance for the selected provider.
-            
-        Raises:
-            ValueError: If provider is unsupported or required credentials are missing.
+            LLM instance for the selected provider.
         """
-        if self.llm_provider == "groq":
-            if not self.groq_api_key:
-                raise ValueError("Groq API key required when llm_provider='groq'")
-            logger.info("Building Groq LLM (model=%s)", self.model_name)
-            return ChatGroq(
-                model=self.model_name,
-                temperature=self.temperature,
-                groq_api_key=self.groq_api_key,
-                max_tokens=512,
-            )
-        
-        elif self.llm_provider == "openai":
-            if not self.openai_api_key:
-                raise ValueError("OpenAI API key required when llm_provider='openai'")
-            logger.info("Building OpenAI LLM (model=%s)", self.model_name)
-            return ChatOpenAI(
-                model=self.model_name,
-                temperature=self.temperature,
-                openai_api_key=self.openai_api_key,
-            )
-        
-        elif self.llm_provider == "ollama":
-            logger.info("Building Ollama LLM (model=%s)", self.model_name)
-            llm_kwargs: Dict[str, Any] = {
-                "model": self.model_name,
-                "temperature": self.temperature,
-                "base_url": self.ollama_base_url,
-            }
-            if self.llm_format:
-                llm_kwargs["format"] = self.llm_format
-            return OllamaLLM(**llm_kwargs)
-        
-        else:
-            raise ValueError(
-                f"Unsupported llm_provider: {self.llm_provider}. "
-                "Must be 'ollama', 'groq', or 'openai'"
-            )
+        return _build_llm_central(
+            provider=self.llm_provider,
+            model=self.model_name,
+            temperature=self.temperature,
+            ollama_base_url=self.ollama_base_url,
+            openai_api_key=self.openai_api_key or "",
+            groq_api_key=self.groq_api_key or "",
+            json_mode=bool(self.llm_format),
+        )
 
     def ask(self, query: str) -> str:
         """Query the RAG system and return the answer string."""

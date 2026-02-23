@@ -31,22 +31,26 @@ class Settings:
     medical_vectorstore_path: Path
     recipes_nutrition_vector_path: Path
 
-    # LLM / Embeddings
-    llm_model: str = "llama3.2"
-    embedding_model: str = "sentence-transformers/all-mpnet-base-v2"
-    ollama_base_url: str = "http://localhost:11434/"
+    # ── Centralized LLM Provider ────────────────────────────────
+    # One setting controls ALL LLM components (agent, RAGs,
+    # intent parser, safety filter). Allowed: "openai", "groq", "ollama"
+    llm_provider: str = "ollama"
 
-    # RAG LLM Configuration (NEW)
-    rag_llm_provider: str = "ollama"  # "ollama", "groq", or "openai"
-    rag_llm_model: str = "llama3.2"   # Model to use for RAG systems
+    # Model names — only the one matching llm_provider is used.
+    llm_model_ollama: str = "llama3.2"
+    llm_model_openai: str = "gpt-4.1-mini"
+    llm_model_groq: str = "llama-3.3-70b-versatile"
+
+    # Embeddings (always local HuggingFace — not affected by llm_provider)
+    embedding_model: str = "sentence-transformers/all-mpnet-base-v2"
+
+    # Connection details
+    ollama_base_url: str = "http://localhost:11434/"
     groq_api_key: str = ""
     openai_api_key: str = ""
 
-    # Agent LLM (can differ from RAG LLM)
-    agent_llm_model: str = "llama3.2"
-    agent_llm_provider: str = "ollama"
+    # Agent
     agent_max_iterations: int = 5
-    agent_llm_model_openai: str = "gpt-4.1-mini"
 
     # Database
     db_path: str = "users.db"
@@ -60,6 +64,15 @@ class Settings:
     # JWT
     jwt_secret: str = "change-me-in-production"
     jwt_expiry_hours: int = 24
+
+    @property
+    def active_llm_model(self) -> str:
+        """Return the model name for the currently active LLM provider."""
+        if self.llm_provider == "openai":
+            return self.llm_model_openai
+        elif self.llm_provider == "groq":
+            return self.llm_model_groq
+        return self.llm_model_ollama
 
     @classmethod
     def from_env(cls, project_root: Optional[Path] = None) -> Settings:
@@ -77,19 +90,17 @@ class Settings:
             processed_dir=root / "data" / "processed",
             medical_vectorstore_path=root / "vector_databases" / "vector_db_medi",
             recipes_nutrition_vector_path=root / "vector_databases",
-            llm_model=os.getenv("LLM_MODEL", "llama3.2"),
+
+            # Centralized LLM provider
+            llm_provider=os.getenv("LLM_PROVIDER", "ollama"),
+            llm_model_ollama=os.getenv("LLM_MODEL_OLLAMA", "llama3.2"),
+            llm_model_openai=os.getenv("LLM_MODEL_OPENAI", "gpt-4.1-mini"),
+            llm_model_groq=os.getenv("LLM_MODEL_GROQ", "llama-3.3-70b-versatile"),
             embedding_model=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2"),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/"),
-            
-            # RAG LLM settings (NEW)
-            rag_llm_provider=os.getenv("RAG_LLM_PROVIDER", "ollama"),
-            rag_llm_model=os.getenv("RAG_LLM_MODEL", "llama3.2"),
             groq_api_key=groq_key,
             openai_api_key=openai_key,
-            
-            agent_llm_model=os.getenv("AGENT_LLM_MODEL", "llama3.2"),
-            agent_llm_provider=os.getenv("AGENT_LLM_PROVIDER", "ollama"),
-            agent_llm_model_openai=os.getenv("AGENT_LLM_MODEL_OPENAI", "gpt-4.1-mini"),
+
             agent_max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "5")),
             db_path=os.getenv("DB_PATH", "users.db"),
             cnn_model_path=os.getenv("CNN_MODEL_PATH", ""),
