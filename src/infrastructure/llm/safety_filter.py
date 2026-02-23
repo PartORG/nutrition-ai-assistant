@@ -1,11 +1,13 @@
 """
-infrastructure.llm.safety_filter - Ollama-based recipe safety validation.
+infrastructure.llm.safety_filter - Multi-provider recipe safety validation.
 
 Implements SafetyFilterPort using a hybrid approach:
     1. Rule-based checks (avoid-lists, dietary restrictions, nutrition limits)
     2. LLM semantic check (catch subtle issues like "prosciutto is pork")
 
 Receives pre-parsed list[Recipe] objects from RecipeRAG (no LLM re-parsing needed).
+The LLM provider (openai / groq / ollama) is controlled by the
+centralized LLM_PROVIDER setting.
 """
 
 from __future__ import annotations
@@ -18,7 +20,8 @@ from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_ollama import OllamaLLM
+
+from infrastructure.llm.llm_builder import build_llm
 
 from domain.models import (
     UserIntent,
@@ -72,19 +75,25 @@ RESTRICTION_INGREDIENT_MAP: dict[str, list[str]] = {
 class SafetyFilter:
     """Implements SafetyFilterPort using any supported LLM provider + rule-based checks."""
 
-
     def __init__(
         self,
-        model_name: str = "llama3.2",
+        *,
+        provider: str = "ollama",
+        model: str = "llama3.2",
         ollama_base_url: str = "http://localhost:11434/",
+        openai_api_key: str = "",
+        groq_api_key: str = "",
         debug: bool = False,
     ):
         self._debug = debug
-        self._llm = OllamaLLM(
-            model=model_name,
+        self._llm = build_llm(
+            provider=provider,
+            model=model,
             temperature=0,
-            format="json",
-            base_url=ollama_base_url,
+            json_mode=True,
+            ollama_base_url=ollama_base_url,
+            openai_api_key=openai_api_key,
+            groq_api_key=groq_api_key,
         )
         self._parser = JsonOutputParser()
         self._check_chain = self._build_check_chain()
