@@ -100,8 +100,11 @@ class ImageAnalysisService:
 
         logger.info("Chaining to recommendation pipeline with query: %s", query[:100])
 
+        # Pass `additional_query` as `intent_query` so the intent parser sees
+        # what the user actually typed (e.g. "low-carb breakfast with fish"),
+        # not the constructed ingredient-list string used for recipe retrieval.
         recommendation = await self._recommendation_service.get_recommendations(
-            ctx, query,
+            ctx, query, intent_query=additional_query,
         )
 
         return ImageAnalysisResult(

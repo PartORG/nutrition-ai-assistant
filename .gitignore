@@ -69,6 +69,10 @@ vector_databases/
 services/yolo_detector/models/*.pth
 services/yolo_detector/models/*.pt
 
+# Uploaded images — keep the folder (via .gitkeep) but not the files
+uploads/*
+!uploads/.gitkeep
+
 # Flutter/Dart
 .dart_tool/
 .flutter-plugins

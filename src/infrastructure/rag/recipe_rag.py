@@ -286,6 +286,12 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             ))
 
         logger.info("Recipe RAG parsed %d recipes from JSON", len(recipes))
+        for r in recipes:
+            n = r.nutrition
+            logger.info(
+                "  Recipe '%s' — nutrition: calories=%s, protein=%s, carbs=%s, fat=%s",
+                r.name, n.calories, n.protein_g, n.carbs_g, n.fat_g,
+            )
         return recipes
 
     # ================================================================

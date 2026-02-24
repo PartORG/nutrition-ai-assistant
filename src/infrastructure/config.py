@@ -61,6 +61,12 @@ class Settings:
     cnn_detector_type: str = "yolo_with_fallback"
     yolo_service_url: str = os.getenv("YOLO_SERVICE_URL", "http://localhost:8001")
 
+    # Shared upload directory for images.
+    # Must be accessible by BOTH the main API and the YOLO service.
+    # In Docker: mount ./uploads → /app/uploads in both containers.
+    # Locally: defaults to ./uploads/ relative to the project root.
+    upload_dir: str = "./uploads"
+
     # JWT
     jwt_secret: str = "change-me-in-production"
     jwt_expiry_hours: int = 24
@@ -110,6 +116,7 @@ class Settings:
             cnn_class_labels_path=os.getenv("CNN_CLASS_LABELS_PATH", ""),
             cnn_detector_type=os.getenv("CNN_DETECTOR_TYPE", "yolo_with_fallback"),
             yolo_service_url=os.getenv("YOLO_SERVICE_URL", "http://localhost:8001"),
+            upload_dir=os.getenv("UPLOAD_DIR", "./uploads"),
             jwt_secret=os.getenv("JWT_SECRET", "change-me-in-production"),
             jwt_expiry_hours=int(os.getenv("JWT_EXPIRY_HOURS", "24")),
         )

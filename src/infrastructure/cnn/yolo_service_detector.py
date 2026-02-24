@@ -4,7 +4,11 @@ infrastructure.cnn.yolo_service_detector - HTTP client for the YOLO microservice
 Implements IngredientDetectorPort by calling the yolo-detector FastAPI microservice.
 Uses requests (already a project dependency) via run_in_executor for async compat.
 
-The microservice accepts base64-encoded images and returns detected food ingredients.
+The microservice accepts either:
+  - {"image_path": "/shared/uploads/abc.jpg"}  — preferred when both services share
+    the same filesystem or Docker volume (no encoding overhead)
+  - {"image_base64": "..."}                    — fallback for any other setup
+
 If the service is unreachable, raises IngredientDetectionError — the caller
 (FallbackIngredientDetector) catches this and falls back to LLaVA.
 
@@ -18,7 +22,6 @@ Setup:
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 from pathlib import Path
 
@@ -37,6 +40,9 @@ class YOLOServiceDetector:
 
     The microservice runs in its own Python environment with ultralytics/torch,
     avoiding dependency conflicts with the main application.
+
+    Sends the file path to the YOLO service so it can read the image directly
+    from the shared volume — no base64 encoding overhead.
     """
 
     def __init__(
@@ -52,13 +58,14 @@ class YOLOServiceDetector:
         """Detect food ingredients by calling the YOLO microservice.
 
         Args:
-            image_path: Path to the image file on disk.
+            image_path: Absolute path to the image file on the shared volume.
 
         Returns:
             DetectedIngredients with ingredient list and Food101 confidence scores.
 
         Raises:
-            IngredientDetectionError: If the service is unreachable or returns an error.
+            IngredientDetectionError: If the file is missing, service is unreachable,
+                                      or the service returns an error.
         """
         path = Path(image_path)
         if not path.exists():
@@ -78,17 +85,19 @@ class YOLOServiceDetector:
             ingredients=result["ingredients"],
             confidence_scores=result["confidence_scores"],
             image_path=image_path,
+            source="YOLO",
         )
 
     def _call_service(self, image_path: str) -> dict:
-        """Synchronous HTTP call to the YOLO microservice (runs in thread pool)."""
-        image_b64 = base64.b64encode(Path(image_path).read_bytes()).decode()
+        """Synchronous HTTP call to the YOLO microservice (runs in thread pool).
 
-        logger.info("Calling YOLO service at %s", self._detect_url)
+        Sends the file path so the YOLO container reads it from the shared volume.
+        """
+        logger.info("Calling YOLO service at %s (path=%s)", self._detect_url, image_path)
         try:
             response = requests.post(
                 self._detect_url,
-                json={"image_base64": image_b64},
+                json={"image_path": image_path},
                 timeout=self._timeout,
             )
         except requests.exceptions.ConnectionError as e:

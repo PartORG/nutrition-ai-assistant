@@ -76,9 +76,11 @@ class YOLOFoodDetector:
         yolo_model_path: str = "yolov8n.pt",
         food_model_path: str = "/app/models/food101_resnet18_best.pth",
         conf_threshold: float = 0.6,
+        food_conf_threshold: float = 0.5,
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.conf_threshold = conf_threshold
+        self.food_conf_threshold = food_conf_threshold
         self.class_names = FOOD101_CLASSES
 
         logger.info("Loading YOLO model from %s", yolo_model_path)
@@ -160,6 +162,18 @@ class YOLOFoodDetector:
                 continue
 
             food_label, food_conf = self._classify_crop(crop)
+
+            # If Food101 confidence is too low, fall back to the YOLO COCO class name.
+            # Food101 is trained on plated dishes — raw ingredients (e.g. carrot) have
+            # no Food101 equivalent, so the model guesses a visually similar dish name
+            # (e.g. "foie gras") with low confidence instead of the correct ingredient.
+            if food_conf < self.food_conf_threshold:
+                food_label = label          # use the YOLO name (e.g. "carrot", "cake")
+                food_conf = conf            # reuse the YOLO detection confidence
+                logger.info(
+                    "Food101 low confidence (%.2f) for '%s' crop — using YOLO label '%s'",
+                    food_conf, label, label,
+                )
 
             detections.append({
                 "detected_object": label,
