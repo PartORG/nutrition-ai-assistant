@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../main.dart';
+import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -20,10 +21,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadAccount() async {
-    final storage = AppServices.instance.storage;
-    final name = await storage.getName();
-    final username = await storage.getUsername();
-    if (mounted) {
+    try {
+      final profileData = await AppServices.instance.api.get('/api')
+          as Map<String, dynamic>;
+      if (!mounted) return;
+      final userMap = profileData['user'] as Map<String, dynamic>?;
+      if (userMap != null) {
+        final firstName = (userMap['name'] as String? ?? '').trim();
+        final lastName = (userMap['surname'] as String? ?? '').trim();
+        final fullName = [firstName, lastName]
+            .where((s) => s.isNotEmpty)
+            .join(' ');
+        final username = (userMap['user_name'] as String? ?? '').trim();
+        setState(() {
+          _displayName = fullName.isNotEmpty ? fullName : username;
+          _username = username;
+        });
+      }
+    } catch (_) {
+      // Fallback to local storage
+      final storage = AppServices.instance.storage;
+      final name = await storage.getName();
+      final username = await storage.getUsername();
+      if (!mounted) return;
       setState(() {
         _displayName = name ?? '';
         _username = username ?? '';
@@ -48,20 +68,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.person_outline,
                         color: AppColors.primary),
-                    title: const Text('Name'),
-                    trailing: Text(
+                    title: Text(
                       _displayName.isNotEmpty ? _displayName : '—',
-                      style: const TextStyle(color: Colors.grey),
                     ),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.alternate_email,
                         color: AppColors.primary),
-                    title: const Text('Username'),
-                    trailing: Text(
-                      _username.isNotEmpty ? '@$_username' : '—',
-                      style: const TextStyle(color: Colors.grey),
+                    title: Text(
+                      _username.isNotEmpty ? _username : '—',
                     ),
                   ),
                 ],

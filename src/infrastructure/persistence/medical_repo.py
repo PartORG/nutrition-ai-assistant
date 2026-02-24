@@ -47,6 +47,16 @@ class SQLiteMedicalRepository:
             )
             return [self._row_to_advice(r) for r in rows]
 
+    async def update_field(self, advice_id: int, field: str, value: str) -> None:
+        allowed_fields = {"health_condition", "medical_advice", "dietary_limit", "avoid", "dietary_constraints"}
+        if field not in allowed_fields:
+            raise ValueError(f"Invalid field '{field}'. Allowed: {allowed_fields}")
+        async with self._conn.acquire() as conn:
+            await conn.execute(
+                f"UPDATE medical_advice SET {field} = ?, updated_at = ? WHERE id = ?",
+                (value, datetime.now().isoformat(), advice_id),
+            )
+
     async def soft_delete(self, advice_id: int) -> None:
         async with self._conn.acquire() as conn:
             await conn.execute(

@@ -54,7 +54,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       final name = await storage.getName();
       final username = await storage.getUsername();
-      final data = await api.get('/dashboard') as Map<String, dynamic>;
+      final data = await api.get('/api/dashboard') as Map<String, dynamic>;
 
       if (!mounted) return;
       setState(() {
