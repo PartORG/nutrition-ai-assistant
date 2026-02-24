@@ -54,11 +54,11 @@ def _extract_user_text(original_query: str, image_path: str) -> str:
 class AnalyzeImageInput(BaseModel):
     """Input schema for the analyze_image tool."""
     image_path: str = Field(
-        description="Path to the food photo to analyze"
-    )
-    find_recipes: bool = Field(
-        default=True,
-        description="If True, also search for recipes using detected ingredients",
+        description=(
+            "The file path extracted from the [IMAGE:...] tag in the user message. "
+            "Extract ONLY the path inside the brackets — e.g. from '[IMAGE:/tmp/photo.jpg]' "
+            "pass '/tmp/photo.jpg'. Do NOT include the [IMAGE:] wrapper."
+        )
     )
 
 
@@ -67,10 +67,10 @@ class AnalyzeImageTool(BaseTool):
 
     name = "analyze_image"
     description = (
-        "Detect ingredients from a food photo and optionally suggest recipes. "
-        "ONLY call this tool when the user's message contains an actual file path "
-        "(e.g. /home/user/photo.jpg or C:\\photos\\meal.png). "
-        "NEVER invent or guess an image path — if no path is present, use search_recipes instead."
+        "Detect ingredients from a food photo and suggest recipes. "
+        "ONLY call this tool when the user's message contains a [IMAGE:...] tag or file path. "
+        "Extract the path from [IMAGE:/path/to/file] and pass it as image_path. "
+        "NEVER invent or guess an image path."
     )
 
     def __init__(self, image_service: ImageAnalysisService):
@@ -83,32 +83,59 @@ class AnalyzeImageTool(BaseTool):
         self,
         ctx: SessionContext,
         image_path: str = "",
-        find_recipes: bool = True,
         **kwargs,
     ) -> ToolResult:
-        """Detect ingredients and optionally get recipe recommendations.
+        """Detect ingredients and get recipe recommendations.
 
         Reads the original user message from ctx.scratch so that any text the
         user typed alongside the photo (e.g. "what can I make for dinner?") is
         forwarded to the recommendation pipeline as additional_query.
         """
-        # Extract the user's actual request, stripping the image path reference
+        logger.info("AnalyzeImageTool.execute() called, raw image_path=%s", image_path)
+
+        # Always prefer the path from the original user message.
+        # The LLM often substitutes a placeholder (e.g. /tmp/photo.jpg) instead
+        # of copying the actual uploaded path from the [IMAGE:...] tag.
         original = ctx.scratch.get("original_query", "")
+        path_match = re.search(r"\[IMAGE:([^\]]+)\]", original, re.IGNORECASE)
+        if path_match:
+            image_path = path_match.group(1).strip()
+            logger.info("AnalyzeImageTool: path from original_query: %s", image_path)
+        else:
+            # Fallback: strip [IMAGE:...] wrapper if the LLM passed it whole
+            image_tag_match = re.search(r"\[IMAGE:([^\]]+)\]", image_path, re.IGNORECASE)
+            if image_tag_match:
+                image_path = image_tag_match.group(1).strip()
+            logger.info("AnalyzeImageTool: resolved image_path=%s", image_path)
+
+        # Extract the user's actual request, stripping the image path reference
         additional_query = _extract_user_text(original, image_path)
+        find_recipes = True
 
         if find_recipes:
             result = await self._service.recommend_from_image(
                 ctx, image_path, additional_query
             )
 
-            ingredients_str = ", ".join(result.detected.ingredients)
+            detected = result.detected
+            ingredients_str = ", ".join(detected.ingredients)
+            source_label = detected.source or "unknown"
+            if detected.source == "LLaVA":
+                source_note = "detected via LLaVA (visual AI)"
+            elif detected.source == "YOLO":
+                source_note = "detected via YOLO"
+            else:
+                source_note = f"detected via {source_label}"
+
             confidence_parts = [
-                f"{ing}: {result.detected.confidence_scores.get(ing, 0):.0%}"
-                for ing in result.detected.ingredients[:5]
+                f"{ing}: {detected.confidence_scores.get(ing, 0):.0%}"
+                for ing in detected.ingredients[:5]
             ]
+            conf_str = ", ".join(confidence_parts) if confidence_parts else "n/a"
             header = (
-                f"Detected ingredients: {ingredients_str}\n"
-                f"Confidence: {', '.join(confidence_parts)}\n\n"
+                f"Detected {len(detected.ingredients)} ingredient(s) ({source_note}):\n"
+                f"{ingredients_str}\n"
+                f"Confidence: {conf_str}\n\n"
             )
 
             rec = result.recommendation
@@ -152,13 +179,13 @@ class AnalyzeImageTool(BaseTool):
                 )
                 return ToolResult(
                     output=output,
-                    data=result.detected,
+                    data=detected,
                     store_as="detected_ingredients",
                 )
             else:
                 return ToolResult(
                     output=f"{header}Could not find matching recipes. Try adding more details.",
-                    data=result.detected,
+                    data=detected,
                     store_as="detected_ingredients",
                 )
         else:

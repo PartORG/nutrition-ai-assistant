@@ -10,7 +10,9 @@ Extracted from host_agent.py create_nutrition_agent() and chat_loop().
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from langchain.agents import AgentExecutor as LangChainAgentExecutor
@@ -19,7 +21,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.language_models import BaseChatModel
 
 from application.context import SessionContext
-from agent.tools.registry import ToolRegistry
+from agent.tools.registry import ToolRegistry  # also used in type hints below
 from agent.memory import ConversationMemory
 
 if TYPE_CHECKING:
@@ -157,10 +159,23 @@ class AgentExecutor:
             "crisis_support",
         }
         output = response.get("output", "I couldn't generate a response.")
-        for action, observation in response.get("intermediate_steps", []):
+        steps = response.get("intermediate_steps", [])
+        logger.info(
+            "Agent finished: %d tool step(s), output starts with: %s",
+            len(steps),
+            output[:80],
+        )
+        for action, observation in steps:
             if getattr(action, "tool", "") in _DIRECT_OUTPUT_TOOLS:
                 output = str(observation)
                 break
+        else:
+            # Fallback: some Ollama models output a raw JSON tool-call string
+            # instead of invoking the tool via the function-calling API.
+            # Detect that pattern and invoke the tool manually.
+            fallback_result = await _try_raw_tool_call_fallback(output, ctx, self._tools)
+            if fallback_result is not None:
+                output = fallback_result
 
         # Update in-memory history manually (no ConversationBufferMemory)
         self._memory.add_user_message(user_input)
@@ -216,3 +231,99 @@ def _build_health_context(ctx: SessionContext) -> str:
         lines.append(f"- Food preferences: {', '.join(preferences)}")
     lines.append("Keep these constraints in mind for every recipe recommendation.")
     return "\n".join(lines)
+
+
+async def _try_raw_tool_call_fallback(
+    output: str,
+    ctx: SessionContext,
+    tools: "ToolRegistry",
+) -> str | None:
+    """Detect and execute a raw JSON tool-call that the model emitted as text.
+
+    Some Ollama models don't support the function-calling API and instead output
+    something like:
+        {"name": "analyze_image", "parameters": {"image_path": "..."}}
+
+    When that happens LangChain treats it as a final answer instead of a tool
+    invocation.  This function detects that pattern and manually invokes the
+    tool so the user gets a real response.
+
+    Returns the tool output string, or None if the output is not a raw tool call.
+    """
+    raw = output.strip()
+
+    # Strip markdown code fences FIRST so the '{' check below works
+    # e.g.  ```json\n{"name": ...}\n```
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.DOTALL)
+    raw = re.sub(r"\s*```$", "", raw, flags=re.DOTALL).strip()
+
+    # Find first '{' — skip any preamble text the model may have added
+    # (e.g. "I'll analyze this image.\n{...}")
+    brace_pos = raw.find("{")
+    if brace_pos == -1:
+        return None
+    raw = raw[brace_pos:]
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        # Windows paths contain backslashes that aren't valid JSON escape
+        # sequences (e.g. C:\Users → \U is invalid in JSON).
+        # Try to repair by escaping lone backslashes before re-parsing.
+        try:
+            fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+            parsed = json.loads(fixed)
+            logger.info("Raw tool-call fallback: repaired JSON backslash escaping")
+        except json.JSONDecodeError:
+            logger.info(
+                "Raw tool-call fallback: JSON parse failed — output: %s", raw[:200]
+            )
+            return None
+
+    if not isinstance(parsed, dict) or "name" not in parsed:
+        return None
+
+    tool_name = parsed.get("name", "")
+    # Support both "parameters" (Ollama style) and "arguments" (OpenAI style)
+    tool_args = parsed.get("parameters") or parsed.get("arguments") or {}
+    if isinstance(tool_args, str):
+        try:
+            tool_args = json.loads(tool_args)
+        except json.JSONDecodeError:
+            tool_args = {}
+
+    if tool_name not in tools.names():
+        logger.info("Raw tool-call fallback: unknown tool '%s'", tool_name)
+        return None
+
+    # For analyze_image: always extract the image path directly from the
+    # original query stored in ctx.scratch.  This is the most reliable
+    # source and avoids any path-escaping issues in the model's JSON output.
+    if tool_name == "analyze_image":
+        original = ctx.scratch.get("original_query", "")
+        path_match = re.search(r"\[IMAGE:([^\]]+)\]", original, re.IGNORECASE)
+        if path_match:
+            extracted = path_match.group(1).strip()
+            tool_args = dict(tool_args)
+            tool_args["image_path"] = extracted
+            logger.info(
+                "Raw tool-call fallback: extracted image_path from original query: %s",
+                extracted,
+            )
+        elif not tool_args.get("image_path"):
+            logger.warning(
+                "Raw tool-call fallback: analyze_image has no image_path "
+                "in args or original query — skipping"
+            )
+            return None
+
+    logger.warning(
+        "Raw tool-call fallback triggered for tool '%s' — "
+        "model does not support native function calling",
+        tool_name,
+    )
+    try:
+        return await tools.invoke(tool_name, ctx, **tool_args)
+    except Exception:
+        logger.exception("Raw tool-call fallback failed for tool '%s'", tool_name)
+        return None

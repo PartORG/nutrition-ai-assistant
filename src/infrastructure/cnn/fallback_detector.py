@@ -5,6 +5,8 @@ Tries the YOLO microservice first. Falls back to LLaVA if:
   1. The YOLO service is unreachable (connection error / timeout)
   2. YOLO returns an empty ingredient list (image contains no recognizable COCO food
      classes — e.g. raw ingredients, spice jars, packaged food)
+  3. YOLO returns only 1 ingredient — too few to build a meaningful recipe query;
+     LLaVA is used instead to get a richer ingredient description from the full image.
 
 This gives the best of both detectors:
   - YOLO: fast, structured, high confidence on whole-food items (pizza, banana, etc.)
@@ -64,18 +66,26 @@ class FallbackIngredientDetector:
                 self._primary.detect(image_path),
                 timeout=self._timeout,
             )
-            if result.ingredients:
+            if len(result.ingredients) > 1:
                 logger.info(
                     "YOLO detected %d ingredient(s) — using YOLO result",
                     len(result.ingredients),
                 )
                 return result
 
-            # YOLO ran successfully but found nothing (no COCO food classes in image)
-            logger.info(
-                "YOLO returned 0 ingredients for %s — falling back to LLaVA",
-                image_path,
-            )
+            # YOLO found 0 or 1 ingredient — not enough for a useful recipe search.
+            # Fall back to LLaVA which describes the full image in natural language.
+            if result.ingredients:
+                logger.info(
+                    "YOLO returned only 1 ingredient ('%s') for %s "
+                    "— falling back to LLaVA for richer detection",
+                    result.ingredients[0], image_path,
+                )
+            else:
+                logger.info(
+                    "YOLO returned 0 ingredients for %s — falling back to LLaVA",
+                    image_path,
+                )
 
         except asyncio.TimeoutError:
             logger.warning(

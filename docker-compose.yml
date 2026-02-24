@@ -37,10 +37,14 @@ services:
     volumes:
       # Model weights — read-only mount from local models/ folder
       - ./services/yolo_detector/models:/app/models:ro
+      # Shared upload directory — the main API saves images here and passes
+      # the path to YOLO so it can read the file directly (no base64 overhead)
+      - ./uploads:/app/uploads
     environment:
       - FOOD_MODEL_PATH=/app/models/food101_resnet18_best.pth
       - YOLO_MODEL_PATH=yolov8n.pt
-      - CONF_THRESHOLD=0.6
+      - CONF_THRESHOLD=0.3
+      - FOOD_CONF_THRESHOLD=0.4
     restart: unless-stopped
 
   # ── 3. Main API ───────────────────────────────────────────────────────────
@@ -62,6 +66,8 @@ services:
       - CNN_DETECTOR_TYPE=yolo_with_fallback
       # Point DB to the persistent volume
       - DB_PATH=/app/db/users.db
+      # Shared upload directory (same path in both api and yolo-detector containers)
+      - UPLOAD_DIR=/app/uploads
     volumes:
       # Data directories (read-only)
       - ./data:/app/data:ro
@@ -69,6 +75,9 @@ services:
       - ./vector_databases:/app/vector_databases:ro
       # Persistent database — bind mount so DBeaver can open ./db/users.db directly
       - ./db:/app/db
+      # Shared upload directory — images uploaded via Flutter are saved here and
+      # the path is forwarded to the YOLO service which mounts the same volume
+      - ./uploads:/app/uploads
     depends_on:
       - ollama
       - yolo-detector

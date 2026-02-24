@@ -75,6 +75,7 @@ class LLaVAIngredientDetector:
             # LLaVA doesn't give confidence scores — mark all as high confidence
             confidence_scores={ing: 0.95 for ing in ingredients},
             image_path=image_path,
+            source="LLaVA",
         )
 
     def _run_llava(self, image_path: str) -> list[str]:

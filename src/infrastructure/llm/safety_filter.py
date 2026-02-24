@@ -193,23 +193,24 @@ class SafetyFilter:
     # ------------------------------------------------------------------
 
     def _build_check_chain(self):
-        system = """You are a medical dietary safety checker. You ONLY flag CLEAR, DEFINITE safety violations. Do NOT flag minor or speculative concerns.
+        system = """You are a medical dietary safety checker. You ONLY flag hidden ingredient issues that simple keyword matching cannot detect.
 
-Your job is to catch issues that simple keyword matching would miss. For example:
-- "prosciutto" is pork (relevant if pork is restricted)
-- "ghee" is dairy (relevant if lactose-free)
-- "soy sauce" contains gluten (relevant if gluten-free)
+Your ONLY job: catch ingredients whose common name does NOT reveal a relevant violation. Examples:
+- "prosciutto" → contains pork (flag only if pork is in Restrictions or AVOID list)
+- "ghee" → contains dairy (flag only if lactose-free is in Restrictions)
+- "soy sauce" → contains gluten (flag only if gluten-free is in Restrictions)
 
-IMPORTANT RULES:
-- Only flag an issue if an ingredient DIRECTLY and CLEARLY violates a stated constraint.
-- Do NOT flag general health concerns (e.g., "oil is high in fat" for a diabetic patient).
-- Do NOT flag LIMIT foods — those are advisory, not violations.
-- Do NOT re-flag obvious ingredient matches (e.g., "peanut butter" matching "peanuts") — those are already handled by rules.
-- When in doubt, do NOT flag it. Prefer false negatives over false positives.
+STRICT RULES — read carefully:
+1. ONLY check against the exact items in "Restrictions/allergies" and "Foods to AVOID" provided below. Do NOT apply any restriction that is not explicitly listed there.
+2. Do NOT flag foods in the "Foods to LIMIT" list — those are soft guidelines, never violations.
+3. Do NOT flag general health concerns ("sugar is bad for diabetes", "fat is bad for cholesterol") — the recipe RAG already handles nutrition optimization.
+4. Do NOT flag obvious name matches — if the ingredient name already contains the banned word, rule-based checks handled it.
+5. When in doubt, return an empty issues list. False negatives are always better than false positives.
+6. severity MUST always be "medium" — these are advisory flags, not hard blocks.
 
 For EACH recipe, check ONLY:
-1. Hidden allergens/avoid foods that are not obvious from the ingredient name (category: "hidden_ingredient", severity: "high")
-2. Ingredients that violate dietary restrictions in a non-obvious way (category: "restriction_violation", severity: "high")
+1. Hidden avoid foods — an ingredient that IS an avoided item but its name does not make this obvious (category: "hidden_ingredient", severity: "medium")
+2. Hidden restriction violations — an ingredient that violates an explicitly listed restriction in a non-obvious way (category: "restriction_violation", severity: "medium")
 
 Return JSON:
 {{
@@ -219,8 +220,8 @@ Return JSON:
       "issues": [
         {{
           "category": "hidden_ingredient|restriction_violation",
-          "severity": "high",
-          "description": "human-readable explanation",
+          "severity": "medium",
+          "description": "short explanation referencing the specific restriction or avoid item",
           "detail": "specific detail"
         }}
       ]
@@ -228,7 +229,7 @@ Return JSON:
   ]
 }}
 
-If a recipe has NO issues, return an empty issues list for it. Most recipes should have NO issues.
+If a recipe has NO issues, return an empty issues list. The VAST MAJORITY of recipes should have NO issues.
 Return ONLY valid JSON."""
 
         prompt = ChatPromptTemplate.from_messages([
@@ -445,6 +446,8 @@ Return ONLY valid JSON."""
                 if n.sodium_mg is not None:
                     nutr_parts.append(f"Sodium: {n.sodium_mg:.0f}mg")
                 lines.append("\n**Nutrition (per serving):** " + " | ".join(nutr_parts))
+            else:
+                lines.append("\n**Nutrition:** not available for this recipe")
             parts.append("\n".join(lines))
 
         return "\n\n---\n\n".join(parts)

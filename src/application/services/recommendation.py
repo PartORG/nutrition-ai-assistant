@@ -69,12 +69,19 @@ class RecommendationService:
         self,
         ctx: SessionContext,
         query: str,
+        intent_query: str = "",
     ) -> RecommendationResult:
         """Run the full 5-step pipeline for a user query.
 
         Args:
-            ctx:   Session context with user_id and user_data.
-            query: The user's natural language request.
+            ctx:          Session context with user_id and user_data.
+            query:        The full query sent to recipe RAG (may include
+                          a constructed ingredient list for image flows).
+            intent_query: Optional shorter text used ONLY for Step 1 intent
+                          parsing. Pass the user's raw message here when
+                          `query` is a constructed string (e.g. image flow)
+                          so the LLM can extract intent from what the user
+                          actually typed. Falls back to `query` if not given.
 
         Returns:
             RecommendationResult with all intermediate and final outputs.
@@ -84,8 +91,9 @@ class RecommendationService:
             ctx.user_id, ctx.request_id, query[:80],
         )
 
-        # Step 1: Parse intent
-        intent = await self._parse_intent(query)
+        # Step 1: Parse intent — use the user's raw text when available so that
+        # a constructed ingredient-list query doesn't drown out the actual request.
+        intent = await self._parse_intent(intent_query if intent_query else query)
         logger.debug("Intent parsed: %s", intent)
         print("\n" + "="*60)
         print("[Step 1] INTENT PARSED")

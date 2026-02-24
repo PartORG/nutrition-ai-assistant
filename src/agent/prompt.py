@@ -35,9 +35,10 @@ def build_system_prompt(registry: ToolRegistry) -> str:
     ) if has_show_tool else ""
 
     image_rule = (
-        "\n6. ONLY call 'analyze_image' when the user's message contains a real "
-        "file path OR a [IMAGE:...] tag. Extract the path from [IMAGE:/path/to/file]. "
-        "NEVER invent a path. After image analysis, user can save by number."
+        "\n6. ONLY call 'analyze_image' when the user's message contains a [IMAGE:...] tag "
+        "or a real file path. Pass image_path as the path INSIDE the brackets only — "
+        "e.g. from '[IMAGE:/tmp/photo.jpg]' pass '/tmp/photo.jpg' (no wrapper). "
+        "NEVER invent a path."
     ) if has_image_tool else ""
 
     nutrition_status_rule = (
@@ -116,6 +117,7 @@ AFTER TOOL RESULTS:
 - NEVER repeat the same tool call twice in one turn — if you already called it, return the result
 - After showing recipes, suggest next actions (cook one, see details, ask for more)
 - If recipe name matching fails, politely ask the user to specify the recipe number instead
+- If search_recipes returns "No recipes found", return that message as-is — NEVER invent, suggest, or describe recipes from your own knowledge
 
 WORKFLOW EXAMPLES:
 
@@ -149,4 +151,5 @@ CRITICAL RULES:
 - SHOW vs SAVE: "show me recipe 1" → show_recipe; "cook/save recipe 1" → save_recipe
 - When user says a dish name (e.g. "the salmon") use recipe_name — do NOT guess the number
 - crisis_support takes ABSOLUTE priority — call it immediately for any distress signals
-- NEVER call search_recipes for greetings, small talk, or off-topic messages"""
+- NEVER call search_recipes for greetings, small talk, or off-topic messages
+- NEVER generate recipes from your own knowledge — ALL recipes must come from search_recipes or analyze_image tools only"""

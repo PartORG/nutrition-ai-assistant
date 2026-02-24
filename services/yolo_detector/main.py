@@ -2,16 +2,26 @@
 yolo_detector.main - FastAPI microservice for YOLO-based ingredient detection.
 
 Exposes two endpoints:
-    POST /detect  - accepts base64-encoded image, returns detected ingredients
+    POST /detect  - detect ingredients from an image (base64 or file path)
     GET  /health  - liveness probe
 
+Accepted input formats (provide exactly one):
+    {"image_path":   "/shared/uploads/photo.jpg"}   ← preferred (shared volume)
+    {"image_base64": "<base64-string>"}              ← fallback (no shared fs)
+
 Environment variables:
-    YOLO_MODEL_PATH  - path to yolov8n.pt (default: "yolov8n.pt", auto-downloaded)
-    FOOD_MODEL_PATH  - path to food101_resnet18_best.pth (required)
-    CONF_THRESHOLD   - detection confidence threshold (default: 0.6)
+    YOLO_MODEL_PATH      - path to yolov8n.pt (default: "yolov8n.pt", auto-downloaded)
+    FOOD_MODEL_PATH      - path to food101_resnet18_best.pth (required)
+    CONF_THRESHOLD       - YOLO detection confidence threshold (default: 0.3)
+    FOOD_CONF_THRESHOLD  - Food101 classifier min confidence for containers (default: 0.4)
 
 Usage:
     uvicorn main:app --host 0.0.0.0 --port 8001
+
+Quick test with a local file:
+    curl -X POST http://localhost:8001/detect \\
+         -H "Content-Type: application/json" \\
+         -d '{"image_path": "/absolute/path/to/food.jpg"}'
 """
 
 from __future__ import annotations
@@ -21,9 +31,11 @@ import logging
 import os
 import tempfile
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from detector import YOLOFoodDetector
 
@@ -35,7 +47,20 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 class DetectRequest(BaseModel):
-    image_base64: str
+    """Accept either a shared-volume file path or a base64-encoded image.
+
+    Exactly one of the two fields must be provided.
+    image_path   is preferred in Docker (shared volume, no encoding overhead).
+    image_base64 is the fallback for any environment without a shared filesystem.
+    """
+    image_path: Optional[str] = None
+    image_base64: Optional[str] = None
+
+    @model_validator(mode="after")
+    def check_one_source(self) -> "DetectRequest":
+        if not self.image_path and not self.image_base64:
+            raise ValueError("Provide either 'image_path' or 'image_base64'")
+        return self
 
 
 class DetectResponse(BaseModel):
@@ -56,13 +81,15 @@ async def lifespan(app: FastAPI):
     global _detector
     yolo_path = os.getenv("YOLO_MODEL_PATH", "yolov8n.pt")
     food_path = os.getenv("FOOD_MODEL_PATH", "./models/food101_resnet18_best.pth")
-    conf = float(os.getenv("CONF_THRESHOLD", "0.6"))
+    conf = float(os.getenv("CONF_THRESHOLD", "0.3"))
+    food_conf = float(os.getenv("FOOD_CONF_THRESHOLD", "0.5"))
 
     logger.info("Loading YOLO food detector...")
     _detector = YOLOFoodDetector(
         yolo_model_path=yolo_path,
         food_model_path=food_path,
         conf_threshold=conf,
+        food_conf_threshold=food_conf,
     )
     logger.info("YOLO food detector ready")
     yield
@@ -89,36 +116,56 @@ async def health():
 
 @app.post("/detect", response_model=DetectResponse)
 async def detect(request: DetectRequest):
-    """Detect food ingredients from a base64-encoded image.
+    """Detect food ingredients from an image.
 
+    Accepts either a shared-volume file path or a base64-encoded image.
     Returns deduplicated ingredients with their highest Food101 confidence scores.
     """
     if _detector is None:
         raise HTTPException(status_code=503, detail="Detector not initialized")
 
-    # Decode base64 → temp file
-    try:
-        image_bytes = base64.b64decode(request.image_base64)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid base64 image data")
+    tmp_path: Optional[str] = None
+    run_path: str
 
-    suffix = ".jpg"
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-            f.write(image_bytes)
-            tmp_path = f.name
+    if request.image_path:
+        # --- File path mode (preferred in Docker / local shared folder) ---
+        if not Path(request.image_path).exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image file not found: {request.image_path}",
+            )
+        run_path = request.image_path
+        logger.info("Detecting from file path: %s", run_path)
+    else:
+        # --- Base64 mode (fallback when no shared filesystem) ---
+        try:
+            image_bytes = base64.b64decode(request.image_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 image data")
 
-        result = _detector.run(tmp_path)
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+                f.write(image_bytes)
+                tmp_path = f.name
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save image: {e}")
+
+        run_path = tmp_path
+        logger.info("Detecting from base64 (saved to tmp: %s)", run_path)
+
+    try:
+        result = _detector.run(run_path)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error("Detection failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Detection error: {e}")
     finally:
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
     # Map detections → deduplicated ingredients with best confidence
     best: dict[str, float] = {}

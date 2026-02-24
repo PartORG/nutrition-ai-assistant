@@ -234,3 +234,4 @@ class DetectedIngredients:
     ingredients: list[str] = field(default_factory=list)
     confidence_scores: dict[str, float] = field(default_factory=dict)
     image_path: str = ""
+    source: str = ""  # Which detector produced this result: "YOLO", "LLaVA", etc.
