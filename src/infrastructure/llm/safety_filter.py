@@ -269,6 +269,10 @@ Return ONLY valid JSON."""
                     ))
 
             for restriction in restrictions_lower:
+                # Skip if the ingredient explicitly declares itself as compliant
+                # e.g. "gluten-free flour" should not violate "gluten-free"
+                if restriction in ing_lower:
+                    continue
                 banned_items = RESTRICTION_INGREDIENT_MAP.get(restriction, [])
                 for banned in banned_items:
                     if self._word_match(banned, ing_lower):
@@ -295,8 +299,14 @@ Return ONLY valid JSON."""
         constraint_rules: dict[str, dict[str, float | None]],
         servings: int | None = None,            # Future: adjust per-serving if servings provided
     ) -> list[SafetyIssue]:
-        
+
         issues: list[SafetyIssue] = []
+
+        if nutrition is None:
+            return issues
+
+        if isinstance(nutrition, dict):
+            nutrition = NutritionValues(**{k: v for k, v in nutrition.items() if k in NutritionValues.__dataclass_fields__})
 
         field_map: dict[str, float | None] = {
             "sugar_g": nutrition.sugar_g,
