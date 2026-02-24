@@ -662,14 +662,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ..._medicalAdvice
                             .where((a) =>
                                 (a['dietary_constraints'] as String? ?? '').isNotEmpty)
-                            .map((a) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Text(
-                                    a['dietary_constraints'] as String,
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
+                            .map((a) => _buildConstraintsList(
+                                  context,
+                                  a['dietary_constraints'] as String,
                                 )),
                       ],
                     ),
@@ -1018,6 +1013,144 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dietary constraints helpers
+  // ---------------------------------------------------------------------------
+
+  static const _nutrientLabels = <String, String>{
+    'sugar_g': 'Sugar',
+    'sodium_mg': 'Sodium',
+    'fiber_g': 'Fiber',
+    'protein_g': 'Protein',
+    'saturated_fat_g': 'Saturated Fat',
+    'fat_g': 'Total Fat',
+    'carbs_g': 'Carbohydrates',
+    'calories': 'Calories',
+    'cholesterol_mg': 'Cholesterol',
+  };
+
+  static const _nutrientUnits = <String, String>{
+    'sugar_g': 'g',
+    'sodium_mg': 'mg',
+    'fiber_g': 'g',
+    'protein_g': 'g',
+    'saturated_fat_g': 'g',
+    'fat_g': 'g',
+    'carbs_g': 'g',
+    'calories': 'kcal',
+    'cholesterol_mg': 'mg',
+  };
+
+  static IconData _iconForNutrient(String key) {
+    switch (key) {
+      case 'sugar_g':
+        return Icons.water_drop_outlined;
+      case 'sodium_mg':
+        return Icons.grain;
+      case 'fiber_g':
+        return Icons.eco_outlined;
+      case 'protein_g':
+        return Icons.fitness_center;
+      case 'saturated_fat_g':
+      case 'fat_g':
+        return Icons.opacity;
+      case 'carbs_g':
+        return Icons.bakery_dining_outlined;
+      case 'calories':
+        return Icons.local_fire_department_outlined;
+      default:
+        return Icons.science_outlined;
+    }
+  }
+
+  static String _fmtNum(num v) =>
+      v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
+
+  Widget _limitChip(String label, Color fg, Color bg) => Container(
+        margin: const EdgeInsets.only(left: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+        ),
+      );
+
+  Widget _buildConstraintsList(BuildContext context, String rawJson) {
+    Map<String, dynamic> parsed;
+    try {
+      parsed = jsonDecode(rawJson) as Map<String, dynamic>;
+    } catch (_) {
+      // Not valid JSON — show as plain text fallback
+      return Text(
+        rawJson,
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: AppColors.textSecondary),
+      );
+    }
+
+    final rows = <Widget>[];
+    for (final entry in parsed.entries) {
+      final key = entry.key;
+      final val = entry.value;
+      if (val is! Map) continue;
+
+      final label = _nutrientLabels[key] ?? key.replaceAll('_', ' ');
+      final unit = _nutrientUnits[key] ?? '';
+      final icon = _iconForNutrient(key);
+
+      final chips = <Widget>[];
+      if (val.containsKey('min')) {
+        chips.add(_limitChip(
+          '≥ ${_fmtNum(val['min'] as num)} $unit',
+          Colors.teal.shade700,
+          Colors.teal.shade50,
+        ));
+      }
+      if (val.containsKey('max')) {
+        chips.add(_limitChip(
+          '≤ ${_fmtNum(val['max'] as num)} $unit',
+          Colors.orange.shade800,
+          Colors.orange.shade50,
+        ));
+      }
+
+      if (chips.isEmpty) continue;
+
+      rows.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+            ),
+            ...chips,
+          ],
+        ),
+      ));
+    }
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
     );
   }
 

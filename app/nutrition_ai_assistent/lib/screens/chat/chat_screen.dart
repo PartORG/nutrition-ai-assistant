@@ -575,15 +575,15 @@ class _TypingIndicatorState extends State<_TypingIndicator>
         children: [
           Container(
             margin: const EdgeInsets.only(right: 8, top: 4),
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(8),
             decoration: const BoxDecoration(
               color: AppColors.cardGreen,
               shape: BoxShape.circle,
             ),
             child: Image.asset(
               'assets/icons/icon_chat.png',
-              width: 28,
-              height: 28,
+              width: 40,
+              height: 40,
             ),
           ),
           Container(
@@ -656,15 +656,15 @@ class _MessageBubble extends StatelessWidget {
           if (!isUser)
             Container(
               margin: const EdgeInsets.only(right: 8, top: 4),
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(8),
               decoration: const BoxDecoration(
                 color: AppColors.cardGreen,
                 shape: BoxShape.circle,
               ),
               child: Image.asset(
                 'assets/icons/icon_chat.png',
-                width: 28,
-                height: 28,
+                width: 40,
+                height: 40,
               ),
             ),
           Flexible(

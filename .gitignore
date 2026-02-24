@@ -74,6 +74,7 @@ uploads/*
 !uploads/.gitkeep
 
 # Flutter/Dart
+pubspec.lock
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
