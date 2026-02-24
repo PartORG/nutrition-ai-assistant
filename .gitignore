@@ -127,3 +127,8 @@ build/
 **/flutter/generated_plugin_registrant.*
 **/flutter/generated_plugins.cmake
 **/flutter/GeneratedPluginRegistrant.*
+
+# Ignore all platform Flutter folders
+**/macos/Flutter/
+**/linux/flutter/
+**/windows/flutter/
