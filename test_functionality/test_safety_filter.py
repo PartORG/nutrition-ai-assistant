@@ -7,9 +7,9 @@ import asyncio
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-from src.infrastructure.config import Settings
-from src.factory import ServiceFactory
-from src.domain.models import Recipe, NutritionConstraints, UserIntent
+from infrastructure.config import Settings
+from factory import ServiceFactory
+from domain.models import Recipe, NutritionValues, NutritionConstraints, UserIntent
 
 # --- Instructions ---
 # recipes: List of Recipe objects to check for safety. Each Recipe should have:
@@ -35,20 +35,50 @@ async def main():
         Recipe(
             name="Chicken Caesar Salad",
             ingredients=["chicken breast", "romaine lettuce", "parmesan cheese", "croutons", "caesar dressing", "anchovy"],
-            nutrition=None,
-            cook_instructions="Grill chicken, toss with lettuce, cheese, croutons, and dressing."
+            nutrition=NutritionValues(
+                calories=520,
+                protein_g=38,
+                carbs_g=22,
+                fat_g=30,
+                saturated_fat_g=8,
+                fiber_g=3,
+                sodium_mg=1820,    # exceeds max 1500 → should trigger warning
+                sugar_g=6,
+            ),
+            cook_instructions="Grill chicken, toss with lettuce, cheese, croutons, and dressing.",
+            servings=1,
         ),
         Recipe(
             name="Vegan Stir Fry",
             ingredients=["tofu", "broccoli", "soy sauce", "carrot", "bell pepper", "ginger"],
-            nutrition=None,
-            cook_instructions="Stir fry vegetables and tofu with soy sauce and ginger."
+            nutrition=NutritionValues(
+                calories=310,
+                protein_g=18,
+                carbs_g=34,
+                fat_g=10,
+                saturated_fat_g=1.5,
+                fiber_g=7,
+                sodium_mg=980,
+                sugar_g=12,
+            ),
+            cook_instructions="Stir fry vegetables and tofu with soy sauce and ginger.",
+            servings=2,
         ),
         Recipe(
             name="Gluten-Free Pancakes",
             ingredients=["gluten-free flour", "egg", "milk", "baking powder", "butter"],
-            nutrition=None,
-            cook_instructions="Mix ingredients, cook pancakes on skillet."
+            nutrition=NutritionValues(
+                calories=440,
+                protein_g=10,
+                carbs_g=62,
+                fat_g=16,
+                saturated_fat_g=9,
+                fiber_g=2,
+                sodium_mg=540,
+                sugar_g=28,            # exceeds max 25 → should trigger warning
+            ),
+            cook_instructions="Mix ingredients, cook pancakes on skillet.",
+            servings=2,
         ),
     ]
     constraints = NutritionConstraints(
