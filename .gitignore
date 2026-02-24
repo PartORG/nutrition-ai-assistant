@@ -122,3 +122,13 @@ build/
 # Windows/Linux (Flutter)
 **/windows/flutter/ephemeral/
 **/linux/flutter/ephemeral/
+
+# Flutter generated plugin registrant files
+**/flutter/generated_plugin_registrant.*
+**/flutter/generated_plugins.cmake
+**/flutter/GeneratedPluginRegistrant.*
+
+# Ignore all platform Flutter folders
+**/macos/Flutter/
+**/linux/flutter/
+**/windows/flutter/
