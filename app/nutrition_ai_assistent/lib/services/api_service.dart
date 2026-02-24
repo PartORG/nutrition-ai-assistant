@@ -63,12 +63,14 @@ class ApiService {
     final token = await _storage.getToken();
     final request = http.MultipartRequest(
       'POST',
-      Uri.parse('$baseUrl/upload/image'),
+      Uri.parse('$baseUrl/api/upload/image'),
     );
     if (token != null) {
       request.headers['Authorization'] = 'Bearer $token';
     }
-    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: filename),
+    );
     final streamed = await request.send().timeout(const Duration(seconds: 30));
     final response = await http.Response.fromStream(streamed);
     final data = _handle(response);

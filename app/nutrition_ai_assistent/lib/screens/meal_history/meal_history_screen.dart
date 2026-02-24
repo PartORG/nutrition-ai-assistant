@@ -31,7 +31,7 @@ class _MealHistoryScreenState extends State<MealHistoryScreen> {
     });
     try {
       final data =
-          await AppServices.instance.api.get('/conversations') as List<dynamic>;
+          await AppServices.instance.api.get('/api/conversations') as List<dynamic>;
       if (!mounted) return;
       setState(() {
         _conversations =
@@ -58,7 +58,7 @@ class _MealHistoryScreenState extends State<MealHistoryScreen> {
     setState(() => _messages[conversationId] = null); // null signals loading
     try {
       final data = await AppServices.instance.api
-          .get('/conversations/$conversationId/messages') as List<dynamic>;
+          .get('/api/conversations/$conversationId/messages') as List<dynamic>;
       if (!mounted) return;
       setState(() {
         _messages[conversationId] =

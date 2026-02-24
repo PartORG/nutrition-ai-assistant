@@ -87,6 +87,12 @@ class RecommendationService:
         # Step 1: Parse intent
         intent = await self._parse_intent(query)
         logger.debug("Intent parsed: %s", intent)
+        print("\n" + "="*60)
+        print("[Step 1] INTENT PARSED")
+        print(f"  restrictions:      {intent.restrictions}")
+        print(f"  health_conditions: {intent.health_conditions}")
+        print(f"  preferences:       {intent.preferences}")
+        print(f"  instructions:      {intent.instructions}")
 
         # Step 2: Get medical constraints (DB-first, then Medical RAG)
         constraints = await self._get_constraints(ctx, intent)
@@ -95,6 +101,12 @@ class RecommendationService:
             constraints.avoid,
             list(constraints.constraints.keys()),
         )
+        print("\n[Step 2] MEDICAL CONSTRAINTS")
+        print(f"  avoid:   {constraints.avoid}")
+        print(f"  limit:   {constraints.limit}")
+        print(f"  goals:   {constraints.dietary_goals}")
+        print(f"  numeric: {constraints.constraints}")
+        print(f"  notes:   {constraints.notes[:120] if constraints.notes else '—'}")
 
         # Step 2.5: Adjust constraints for today's already-consumed nutrition.
         # The limits in medical_advice are DAILY totals (e.g. sugar_g=50g/day).
@@ -109,16 +121,30 @@ class RecommendationService:
                 ctx.user_id,
                 {k: round(v, 1) for k, v in daily_totals.items() if v > 0},
             )
+            print("\n[Step 2.5] DAILY BUDGET ADJUSTMENT")
+            print(f"  consumed today: { {k: round(v,1) for k,v in daily_totals.items() if v > 0} }")
+            print(f"  adjusted limits: {adjusted_constraints.constraints}")
 
         # Step 3: Build augmented query (includes remaining daily budget)
         augmented = self._build_augmented_query(
             query, intent, adjusted_constraints, daily_totals,
         )
         logger.debug("Augmented query built (%d chars)", len(augmented))
+        print("\n[Step 3] AUGMENTED QUERY")
+        print(augmented)
 
         # Step 4: Retrieve recipes
         raw_recommendations = await self._retrieve_recipes(augmented)
         logger.debug("Recommendations received")
+        print("\n[Step 4] RECIPE RAG OUTPUT")
+        for i, r in enumerate(raw_recommendations, 1):
+            print(f"  {i}. {r.name}")
+            print(f"     ingredients: {r.ingredients}")
+            n = r.nutrition
+            print(f"     nutrition:   calories={n.calories}, protein={n.protein_g}g, "
+                  f"carbs={n.carbs_g}g, fat={n.fat_g}g, sugar={n.sugar_g}g, "
+                  f"sodium={n.sodium_mg}mg, fiber={n.fiber_g}g")
+            print(f"     servings:    {r.servings}")
 
         # Step 5: Safety check against REMAINING daily budget
         safety_result = await self._safety_check(
@@ -128,6 +154,13 @@ class RecommendationService:
             "Pipeline complete: %d/%d recipes passed safety",
             safety_result.safe_count, safety_result.total_count,
         )
+        print("\n[Step 5] SAFETY FILTER RESULTS")
+        for verdict in safety_result.recipe_verdicts:
+            print(f"  {verdict.verdict.value.upper():8s} | {verdict.recipe_name}")
+            for issue in verdict.issues:
+                print(f"           [{issue.severity}] {issue.category}: {issue.description}")
+        print(f"\n  Summary: {safety_result.safe_count}/{safety_result.total_count} recipes passed")
+        print("="*60 + "\n")
         if safety_result.total_count > 0 and safety_result.safe_count == 0:
             logger.warning("Safety filter rejected ALL recipes. Details:\n%s", safety_result.summary)
 
