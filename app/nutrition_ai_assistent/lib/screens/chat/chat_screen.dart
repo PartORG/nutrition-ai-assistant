@@ -97,7 +97,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _loadHistory() async {
     try {
-      final data = await AppServices.instance.api.get('/chat/history?hours=24');
+      final data = await AppServices.instance.api.get('/api/chat/history?hours=24');
       final rawMessages = data['messages'] as List<dynamic>? ?? [];
       if (!mounted || rawMessages.isEmpty) return;
 

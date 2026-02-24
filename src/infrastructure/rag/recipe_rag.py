@@ -260,9 +260,24 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             if isinstance(instructions, list):
                 instructions = "\n".join(str(s) for s in instructions)
 
+            raw_ingredients = r.get("ingredients", [])
+            if isinstance(raw_ingredients, list):
+                normalized_ingredients = []
+                for ing in raw_ingredients:
+                    if isinstance(ing, str):
+                        normalized_ingredients.append(ing)
+                    elif isinstance(ing, dict):
+                        # LLM returned {"name": "...", "amount": "..."} instead of a plain string
+                        parts = [str(v) for v in ing.values() if v]
+                        normalized_ingredients.append(" ".join(parts))
+                    else:
+                        normalized_ingredients.append(str(ing))
+            else:
+                normalized_ingredients = []
+
             recipes.append(Recipe(
                 name=r.get("name", "").strip(),
-                ingredients=r.get("ingredients", []),
+                ingredients=normalized_ingredients,
                 nutrition=nutrition,
                 why_recommended=r.get("why_recommended", ""),
                 servings=int(r.get("servings") or 1),

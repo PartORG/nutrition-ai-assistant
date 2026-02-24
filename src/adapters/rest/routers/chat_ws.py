@@ -46,7 +46,8 @@ async def websocket_chat(
 
     try:
         payload = auth_service.verify_token(token)
-    except Exception:
+    except Exception as exc:
+        logger.warning("WebSocket auth rejected: %s", exc)
         await ws.close(code=4001, reason="Invalid or expired token")
         return
 
