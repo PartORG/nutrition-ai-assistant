@@ -8,7 +8,9 @@ No DB writes — display only.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Union
+
+from pydantic import BaseModel, Field, field_validator
 
 from application.context import SessionContext
 from application.dto import RecommendationResult
@@ -19,12 +21,28 @@ from agent.tools.base import BaseTool, ToolResult
 class ShowRecipeInput(BaseModel):
     """Input schema for the show_recipe tool."""
 
-    recipe_number: int = Field(
+    recipe_number: Union[int, list[int]] = Field(
         description=(
-            "The 1-based number of the recipe to display, matching the numbered "
-            "list already shown to the user (e.g. 1, 2, or 3)."
+            "The 1-based number(s) of the recipe(s) to display, matching the "
+            "numbered list already shown to the user (e.g. 1, 2, or [1, 2, 3])."
         )
     )
+
+    @field_validator("recipe_number", mode="before")
+    @classmethod
+    def coerce_to_int_or_list(cls, v):
+        if isinstance(v, list):
+            coerced = []
+            for item in v:
+                try:
+                    coerced.append(int(item))
+                except (TypeError, ValueError):
+                    pass
+            return coerced if coerced else 1
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 1
 
 
 class ShowRecipeTool(BaseTool):
@@ -45,10 +63,10 @@ class ShowRecipeTool(BaseTool):
     async def execute(
         self,
         ctx: SessionContext,
-        recipe_number: int = 1,
+        recipe_number: Union[int, list[int]] = 1,
         **kwargs,
     ) -> ToolResult:
-        """Return a detailed markdown view of the requested recipe."""
+        """Return a detailed markdown view of the requested recipe(s)."""
         rec_result: RecommendationResult | None = ctx.scratch.get(
             "last_recommendations"
         )
@@ -64,16 +82,22 @@ class ShowRecipeTool(BaseTool):
         if not recipes:
             return ToolResult(output="No recipes were found in the last search.")
 
-        if recipe_number < 1 or recipe_number > len(recipes):
-            return ToolResult(
-                output=(
-                    f"Recipe {recipe_number} doesn't exist. "
+        # Normalise to a list of numbers
+        numbers: list[int] = (
+            recipe_number if isinstance(recipe_number, list) else [recipe_number]
+        )
+
+        parts: list[str] = []
+        for num in numbers:
+            if num < 1 or num > len(recipes):
+                parts.append(
+                    f"Recipe {num} doesn't exist. "
                     f"Please choose a number between 1 and {len(recipes)}."
                 )
-            )
+            else:
+                parts.append(_format_recipe_detail(recipes[num - 1], num))
 
-        recipe = recipes[recipe_number - 1]
-        return ToolResult(output=_format_recipe_detail(recipe, recipe_number))
+        return ToolResult(output="\n\n---\n\n".join(parts))
 
 
 # ---------------------------------------------------------------------------

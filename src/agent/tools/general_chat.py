@@ -18,8 +18,11 @@ class GeneralChatInput(BaseModel):
     """Input schema for the general_chat tool."""
 
     message: str = Field(
-        description="The user's general question or conversational message"
+        default="",
+        description="The user's general question or conversational message",
     )
+    # Some LLMs send 'query' instead of 'message' — accepted as alias
+    query: str = Field(default="", exclude=True, description="Alias for message")
 
 
 class GeneralChatTool(BaseTool):

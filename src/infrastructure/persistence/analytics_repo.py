@@ -173,7 +173,8 @@ class SQLiteAnalyticsRepository:
             recipe_rows = await conn.execute_fetchall(
                 """SELECT rh.id, rh.recipe_name, rh.created_at,
                           nh.calories, nh.protein, nh.fat, nh.carbohydrates, nh.fiber, nh.sodium,
-                          rh.ingredients, rh.cook_instructions, rh.prep_time, rh.servings
+                          rh.ingredients, rh.cook_instructions, rh.prep_time, rh.servings,
+                          rh.rating
                    FROM recipe_history rh
                    LEFT JOIN nutrition_history nh
                        ON nh.recipe_id = rh.id
@@ -200,6 +201,7 @@ class SQLiteAnalyticsRepository:
                     "cook_instructions": r[10] or "",
                     "prep_time": r[11] or "",
                     "servings": r[12],
+                    "rating": r[13],
                 }
                 for r in recipe_rows
             ]
@@ -210,3 +212,19 @@ class SQLiteAnalyticsRepository:
             "nutrition_daily": nutrition_daily,
             "recent_recipes": recent_recipes,
         }
+
+    async def update_recipe_rating(
+        self, user_id: int, recipe_id: int, rating: int
+    ) -> bool:
+        """Set the star rating for a saved recipe. Returns True if a row was updated."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        async with self._conn.acquire() as conn:
+            cursor = await conn.execute(
+                """UPDATE recipe_history
+                   SET rating = ?, updated_at = ?
+                   WHERE id = ? AND user_id = ?
+                     AND (deleted_at = '' OR deleted_at IS NULL)""",
+                (rating, now, recipe_id, user_id),
+            )
+            return cursor.rowcount > 0

@@ -62,6 +62,7 @@ class RecipeManagerService:
             ingredients=", ".join(recipe.ingredients),
             cook_instructions=recipe.cook_instructions,
             prep_time=recipe.prep_time,
+            rating=rating,
         )
         history_id = await self._recipe_repo.save(history)
 

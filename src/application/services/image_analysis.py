@@ -94,7 +94,7 @@ class ImageAnalysisService:
 
         # Build a query from detected ingredients
         ingredients_str = ", ".join(detected.ingredients)
-        query = f"I have these ingredients at home: {ingredients_str}. Suggest recipes using them."
+        query = f"use these ingredients if possible: {ingredients_str}."
         if additional_query:
             query += f" {additional_query}"
 

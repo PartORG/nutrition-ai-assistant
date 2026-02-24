@@ -105,8 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Dashboard',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat_outlined),
-            activeIcon: Icon(Icons.chat),
+            icon: ImageIcon(AssetImage('assets/icons/icon_chat.png')),
+            activeIcon: ImageIcon(AssetImage('assets/icons/icon_chat.png')),
             label: 'Chat',
           ),
           BottomNavigationBarItem(

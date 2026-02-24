@@ -120,6 +120,10 @@ class AgentExecutor:
         # pipeline — bypassing any LLM rewriting of the tool argument.
         ctx.scratch["original_query"] = user_input
 
+        # Clear the previous turn's tool-call cache so the backup logic
+        # below only triggers for a tool called *this* turn.
+        ctx.scratch.pop("_last_tool_call", None)
+
         loop = asyncio.get_event_loop()
         try:
             response = await loop.run_in_executor(
@@ -157,6 +161,8 @@ class AgentExecutor:
             "nutrition_status",
             "safety_guard",
             "crisis_support",
+            "save_recipe",
+            "show_recipe",
         }
         output = response.get("output", "I couldn't generate a response.")
         steps = response.get("intermediate_steps", [])
@@ -165,17 +171,45 @@ class AgentExecutor:
             len(steps),
             output[:80],
         )
+        found_direct_tool = False
         for action, observation in steps:
-            if getattr(action, "tool", "") in _DIRECT_OUTPUT_TOOLS:
-                output = str(observation)
+            tool_name = getattr(action, "tool", "")
+            logger.info(
+                "Step: action_type=%s tool=%r obs_type=%s",
+                type(action).__name__, tool_name, type(observation).__name__,
+            )
+            if tool_name in _DIRECT_OUTPUT_TOOLS:
+                # LangChain >= 0.3 may return a BaseMessage object as observation;
+                # extract .content to get the plain text tool output.
+                if hasattr(observation, "content"):
+                    output = observation.content
+                else:
+                    output = str(observation)
+                logger.info("Using direct output from tool '%s'", tool_name)
+                found_direct_tool = True
                 break
-        else:
+
+        if not found_direct_tool:
             # Fallback: some Ollama models output a raw JSON tool-call string
             # instead of invoking the tool via the function-calling API.
             # Detect that pattern and invoke the tool manually.
             fallback_result = await _try_raw_tool_call_fallback(output, ctx, self._tools)
             if fallback_result is not None:
                 output = fallback_result
+            else:
+                # Secondary backup: if the tool WAS executed (captured in ctx.scratch
+                # by the registry) but intermediate_steps didn't expose it correctly,
+                # use the cached output directly.
+                last_call = ctx.scratch.get("_last_tool_call")
+                if last_call:
+                    last_name, last_output = last_call
+                    if last_name in _DIRECT_OUTPUT_TOOLS and last_output:
+                        logger.warning(
+                            "Direct tool '%s' not found in intermediate_steps — "
+                            "using ctx.scratch backup output",
+                            last_name,
+                        )
+                        output = last_output
 
         # Update in-memory history manually (no ConversationBufferMemory)
         self._memory.add_user_message(user_input)

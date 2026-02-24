@@ -127,6 +127,15 @@ class _RecipeCardState extends State<_RecipeCard> {
       _rating = rating;
       widget.recipe['rating'] = rating;
     });
+    final recipeId = widget.recipe['id'] as int?;
+    if (recipeId != null) {
+      AppServices.instance.api
+          .patch(
+            '/api/dashboard/recipes/$recipeId/rating',
+            {'rating': rating.toInt()},
+          )
+          .catchError((_) {});
+    }
   }
 
   @override
