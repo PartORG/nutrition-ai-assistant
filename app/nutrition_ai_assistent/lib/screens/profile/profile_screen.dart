@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../../main.dart';
 import '../../services/api_service.dart';
@@ -906,15 +908,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildMedicalAdviceSection(BuildContext context) {
-    final hasAdvice = _medicalAdvice.any((a) =>
-        (a['medical_advice'] as String? ?? '').isNotEmpty);
+    String joinField(String key) => _medicalAdvice
+        .where((a) => (a[key] as String? ?? '').isNotEmpty)
+        .map((a) => a[key] as String)
+        .join('\n');
 
-    final adviceText = hasAdvice
-        ? _medicalAdvice
-            .where((a) => (a['medical_advice'] as String? ?? '').isNotEmpty)
-            .map((a) => a['medical_advice'] as String)
-            .join('\n')
-        : 'No medical advice saved in profile.';
+    final adviceText = joinField('medical_advice');
+    final avoidText = joinField('avoid');
+    final limitText = joinField('dietary_limit');
+    final hasAdvice =
+        adviceText.isNotEmpty || avoidText.isNotEmpty || limitText.isNotEmpty;
+
+    Widget adviceRow(IconData icon, Color color, String label, String text) =>
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.cardGreen,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      text,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
 
     return Card(
       child: Padding(
@@ -924,37 +965,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Text(
               'Medical Advice',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: hasAdvice ? AppColors.cardGreen : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    hasAdvice ? Icons.local_hospital_outlined : Icons.info_outline,
-                    color: hasAdvice ? AppColors.primary : Colors.grey,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      adviceText,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: hasAdvice ? AppColors.textSecondary : Colors.grey[600],
+            if (!hasAdvice)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.grey, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'No medical advice saved in profile.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.grey[600]),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            if (adviceText.isNotEmpty)
+              adviceRow(
+                Icons.local_hospital_outlined,
+                AppColors.primary,
+                'Advice',
+                adviceText,
+              ),
+            if (avoidText.isNotEmpty)
+              adviceRow(
+                Icons.no_food_outlined,
+                Colors.red.shade600,
+                'Avoid',
+                avoidText,
+              ),
+            if (limitText.isNotEmpty)
+              adviceRow(
+                Icons.monitor_heart_outlined,
+                Colors.orange.shade700,
+                'Dietary Limit',
+                limitText,
+              ),
           ],
         ),
       ),

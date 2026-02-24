@@ -24,40 +24,43 @@ class AppDrawer extends StatelessWidget {
     return Drawer(
       child: Column(
         children: [
-          DrawerHeader(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primaryDark, AppColors.primary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          Builder(
+            builder: (context) => Container(
+              width: double.infinity,
+              color: AppColors.primary,
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 20,
+                left: 16,
+                right: 16,
+                bottom: 20,
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const CircleAvatar(
-                  radius: 30,
-                  backgroundColor: Colors.white24,
-                  child: Icon(Icons.person, size: 30, color: Colors.white),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  displayName.isNotEmpty ? displayName : 'NutriAI User',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.white24,
+                    child: Icon(Icons.person, size: 30, color: Colors.white),
                   ),
-                ),
-                if (username.isNotEmpty)
+                  const SizedBox(height: 10),
                   Text(
-                    '@$username',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 13,
+                    displayName.isNotEmpty ? displayName : 'NutriAI User',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-              ],
+                  if (username.isNotEmpty)
+                    Text(
+                      '@$username',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 13,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           _DrawerItem(
@@ -68,6 +71,7 @@ class AppDrawer extends StatelessWidget {
           ),
           _DrawerItem(
             icon: Icons.chat_outlined,
+            assetIcon: 'assets/icons/icon_chat.png',
             label: 'Chat with AI',
             selected: selectedIndex == 1,
             onTap: () { onItemSelected(1); Navigator.pop(context); },
@@ -122,6 +126,7 @@ class AppDrawer extends StatelessWidget {
 
 class _DrawerItem extends StatelessWidget {
   final IconData icon;
+  final String? assetIcon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -129,6 +134,7 @@ class _DrawerItem extends StatelessWidget {
 
   const _DrawerItem({
     required this.icon,
+    this.assetIcon,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -139,7 +145,9 @@ class _DrawerItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final effectiveColor = color ?? (selected ? AppColors.primary : Colors.grey[700]!);
     return ListTile(
-      leading: Icon(icon, color: effectiveColor),
+      leading: assetIcon != null
+          ? ImageIcon(AssetImage(assetIcon!), color: effectiveColor, size: 24)
+          : Icon(icon, color: effectiveColor),
       title: Text(
         label,
         style: TextStyle(

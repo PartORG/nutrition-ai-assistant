@@ -1,6 +1,7 @@
 """Protected analytics endpoint — aggregated usage statistics."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from factory import ServiceFactory
 from adapters.rest.dependencies import get_factory, get_current_user, CurrentUser
@@ -47,6 +48,25 @@ async def get_dashboard(
     """
     repo = factory.create_analytics_repository()
     return await repo.get_user_dashboard(user.user_id)
+
+
+class _RatingUpdate(BaseModel):
+    rating: int = Field(..., ge=1, le=5, description="Star rating from 1 to 5")
+
+
+@router.patch("/dashboard/recipes/{recipe_id}/rating")
+async def update_recipe_rating(
+    recipe_id: int,
+    body: _RatingUpdate,
+    user: CurrentUser = Depends(get_current_user),
+    factory: ServiceFactory = Depends(get_factory),
+):
+    """Update the star rating for a saved recipe (1–5)."""
+    repo = factory.create_analytics_repository()
+    updated = await repo.update_recipe_rating(user.user_id, recipe_id, body.rating)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return {"ok": True}
 
 
 async def _gather(repo):

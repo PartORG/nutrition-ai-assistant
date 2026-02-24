@@ -78,6 +78,11 @@ class ToolRegistry:
                     if result.store_as and result.data is not None:
                         context.scratch[result.store_as] = result.data
 
+                    # Track the last tool call so executor.py can use the
+                    # output directly when intermediate_steps parsing fails
+                    # (e.g. LangChain version differences in observation type).
+                    context.scratch["_last_tool_call"] = (t.name, result.output)
+
                     return result.output
                 return func
 

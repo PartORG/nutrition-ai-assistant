@@ -21,7 +21,7 @@ class ApiException implements Exception {
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8000',
+    defaultValue: 'http://127.0.0.1:9000',
   );
 
   final StorageService _storage;
@@ -75,6 +75,18 @@ class ApiService {
     final response = await http.Response.fromStream(streamed);
     final data = _handle(response);
     return data['path'] as String;
+  }
+
+  Future<dynamic> patch(String path, Map<String, dynamic> body) async {
+    final headers = await _authHeaders();
+    final response = await http
+        .patch(
+          Uri.parse('$baseUrl$path'),
+          headers: headers,
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 30));
+    return _handle(response);
   }
 
   Future<dynamic> get(String path) async {
