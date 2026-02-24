@@ -121,8 +121,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             _buildGreetingCard(context),
             const SizedBox(height: 16),
-            _buildStatsRow(context),
-            const SizedBox(height: 16),
             _buildGoalsRow(context),
             const SizedBox(height: 16),
             if (_nutritionTotal != null) ...[
@@ -134,7 +132,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 16),
             ],
             if (_recentRecipes.isNotEmpty) ...[
-              _buildRecentRecipes(context),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 3, child: _buildRecentRecipes(context)),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 1, child: _buildSavedRecipesStat(context)),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
             ],
             _buildTipCard(context),
@@ -188,11 +195,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ─── Stats row ─────────────────────────────────────────────────────────────
-  Widget _buildStatsRow(BuildContext context) {
+  // ─── Saved Recipes Stat ───────────────────────────────────────────────────
+  Widget _buildSavedRecipesStat(BuildContext context) {
     final saved = (_overview['saved_recipes'] as num?)?.toInt() ?? 0;
-    return _StatCard(
-      icon: Icons.restaurant_menu, label: 'Saved Recipes', value: '$saved',
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.restaurant_menu, color: AppColors.primary, size: 22),
+            const SizedBox(height: 6),
+            Text(
+              '$saved',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryDark,
+              ),
+            ),
+            Text(
+              'Total Saved Recipes',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey,
+                fontSize: 11,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
