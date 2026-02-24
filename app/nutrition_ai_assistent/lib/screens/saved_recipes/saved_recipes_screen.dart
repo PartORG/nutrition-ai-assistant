@@ -28,7 +28,7 @@ class _SavedRecipesScreenState extends State<SavedRecipesScreen> {
     });
     try {
       final data =
-          await AppServices.instance.api.get('/dashboard')
+          await AppServices.instance.api.get('/api/dashboard')
               as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
