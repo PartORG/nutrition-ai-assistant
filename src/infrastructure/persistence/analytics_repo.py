@@ -115,7 +115,7 @@ class SQLiteAnalyticsRepository:
                 "saved_recipes": row[2] or 0,
             }
 
-            # TOTAL nutrition across all saved meals (sum, not average)
+            # TODAY's nutrition total (meals saved/logged today)
             sum_rows = await conn.execute_fetchall(
                 """SELECT
                     SUM(calories), SUM(protein), SUM(fat),
@@ -123,6 +123,7 @@ class SQLiteAnalyticsRepository:
                     COUNT(*)
                    FROM nutrition_history
                    WHERE user_id = ? AND (deleted_at = '' OR deleted_at IS NULL)
+                     AND DATE(created_at) = DATE('now')
                 """,
                 (user_id,),
             )
@@ -206,11 +207,28 @@ class SQLiteAnalyticsRepository:
                 for r in recipe_rows
             ]
 
+            # Latest dietary constraints from the user's medical profile
+            constraint_rows = await conn.execute_fetchall(
+                """SELECT dietary_constraints
+                   FROM medical_advice
+                   WHERE user_id = ?
+                     AND (deleted_at = '' OR deleted_at IS NULL)
+                     AND COALESCE(dietary_constraints, '') != ''
+                   ORDER BY created_at DESC
+                   LIMIT 1
+                """,
+                (user_id,),
+            )
+            dietary_constraints = (
+                constraint_rows[0][0] if constraint_rows else None
+            )
+
         return {
             "overview": overview,
             "nutrition_total": nutrition_total,
             "nutrition_daily": nutrition_daily,
             "recent_recipes": recent_recipes,
+            "dietary_constraints": dietary_constraints,
         }
 
     async def update_recipe_rating(
