@@ -22,7 +22,7 @@ class ChatWsService {
         .replaceFirst('http://', 'ws://');
 
     _channel = WebSocketChannel.connect(
-      Uri.parse('$wsBase/ws/chat?token=$token'),
+      Uri.parse('$wsBase/api/ws/chat?token=$token'),
     );
 
     // Wait for the handshake to complete (web_socket_channel v3+).
