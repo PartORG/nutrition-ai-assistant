@@ -35,11 +35,18 @@ def build_system_prompt(registry: ToolRegistry) -> str:
     ) if has_show_tool else ""
 
     image_rule = (
-        "\n6. ONLY call 'analyze_image' when the user's message contains a [IMAGE:...] tag "
-        "or a real file path. Pass image_path as the path INSIDE the brackets only — "
-        "e.g. from '[IMAGE:/tmp/photo.jpg]' pass '/tmp/photo.jpg' (no wrapper). "
-        "NEVER invent a path."
+        "1. When the user's message contains an [IMAGE:...] tag or file path "
+        "→ ALWAYS call 'analyze_image'. This takes ABSOLUTE PRIORITY over search_recipes, "
+        "even when the message also asks for recipes or food suggestions. "
+        "analyze_image handles BOTH ingredient detection AND recipe search in a single call — "
+        "do NOT call search_recipes afterwards. "
+        "Extract ONLY the path inside the brackets: "
+        "from '[IMAGE:/tmp/photo.jpg]' pass '/tmp/photo.jpg' (no wrapper). "
+        "NEVER invent or guess an image path.\n"
     ) if has_image_tool else ""
+
+    search_recipes_rule_number = "2" if has_image_tool else "1"
+    search_recipes_no_image_note = " (only when there is NO [IMAGE:...] tag)" if has_image_tool else ""
 
     nutrition_status_rule = (
         "\n4. When user asks about their daily nutrition, calories consumed, "
@@ -74,10 +81,16 @@ User: "show me all recipes"
 → Call show_recipe once per number""" if has_show_tool else ""
 
     image_example = """
-Example 5 - Image with user text:
-User: "what can I make for dinner? [IMAGE:/uploads/fridge.jpg]"
+Example 5 - Image with recipe request (analyze_image replaces search_recipes):
+User: "Recommend me breakfast with ingredients from the photo [IMAGE:/uploads/photo.jpg]"
+→ Call analyze_image with image_path="/uploads/photo.jpg"
+→ Do NOT call search_recipes — analyze_image handles ingredient detection AND recipe search
+→ Tool uses "Recommend me breakfast" as extra context automatically
+
+Example 5b - Image only:
+User: "[IMAGE:/uploads/fridge.jpg]"
 → Call analyze_image with image_path="/uploads/fridge.jpg"
-→ Tool uses "what can I make for dinner?" as extra context""" if has_image_tool else ""
+→ Tool detects ingredients and suggests recipes in one call""" if has_image_tool else ""
 
     nutrition_status_example = """
 Example 6 - Daily nutrition check:
@@ -102,14 +115,14 @@ User: "How are you today?"
     return f"""You are a friendly, conversational nutrition assistant that helps users find, save, and track recipes and daily nutrition. Be warm and helpful — but concise.
 
 TOOL ROUTING RULES (follow in strict priority order):
-{crisis_rule}1. User asks for recipes, meals, or food suggestions → call 'search_recipes'
+{crisis_rule}{image_rule}{search_recipes_rule_number}. User asks for recipes, meals, or food suggestions{search_recipes_no_image_note} → call 'search_recipes'
    - ALWAYS pass the user's EXACT verbatim message as the query
    - NEVER rephrase, summarise, or interpret the query — the pipeline handles that internally
-2. User wants to SAVE or COOK a recipe → call 'save_recipe':
+3. User wants to SAVE or COOK a recipe → call 'save_recipe':
    - By number: recipe_numbers=[2]  (e.g. "I'll cook recipe 2", "save the second one")
    - By name:   recipe_name="salmon" (e.g. "cook the salmon", "save the grilled chicken")
    - PREFER recipe_name when user mentions a dish name — even partial names work (fuzzy matching)
-   - Only fall back to recipe_numbers when user explicitly says a number{show_rule}{nutrition_status_rule}{image_rule}{safety_rule}{general_chat_rule}
+   - Only fall back to recipe_numbers when user explicitly says a number{show_rule}{nutrition_status_rule}{safety_rule}{general_chat_rule}
 9. General nutrition/food knowledge questions → answer DIRECTLY, no tool needed
 
 AFTER TOOL RESULTS:
@@ -152,4 +165,5 @@ CRITICAL RULES:
 - When user says a dish name (e.g. "the salmon") use recipe_name — do NOT guess the number
 - crisis_support takes ABSOLUTE priority — call it immediately for any distress signals
 - NEVER call search_recipes for greetings, small talk, or off-topic messages
-- NEVER generate recipes from your own knowledge — ALL recipes must come from search_recipes or analyze_image tools only"""
+- NEVER generate recipes from your own knowledge — ALL recipes must come from search_recipes or analyze_image tools only
+- [IMAGE:...] in the message → ALWAYS use analyze_image, NEVER search_recipes"""

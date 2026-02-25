@@ -19,6 +19,7 @@ All methods are async. Dependencies are injected via constructor.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from typing import Optional
 
@@ -94,6 +95,24 @@ class RecommendationService:
         # Step 1: Parse intent — use the user's raw text when available so that
         # a constructed ingredient-list query doesn't drown out the actual request.
         intent = await self._parse_intent(intent_query if intent_query else query)
+
+        # Merge saved profile preferences so the user doesn't have to repeat
+        # favourite cuisines / ingredients in every message.
+        saved_prefs = ctx.user_data.get("preferences", [])
+        if saved_prefs:
+            merged_prefs = list(dict.fromkeys(intent.preferences + saved_prefs))
+            if merged_prefs != list(intent.preferences):
+                intent = dataclasses.replace(intent, preferences=merged_prefs)
+
+        # Merge saved profile restrictions (e.g. "vegan", "no shellfish") so
+        # they appear as "Dietary restrictions:" in the augmented query rather
+        # than being silently buried in the numeric-limits section.
+        saved_restrictions = ctx.user_data.get("restrictions", [])
+        if saved_restrictions:
+            merged_restrictions = list(dict.fromkeys(list(intent.restrictions) + saved_restrictions))
+            if merged_restrictions != list(intent.restrictions):
+                intent = dataclasses.replace(intent, restrictions=merged_restrictions)
+
         logger.debug("Intent parsed: %s", intent)
         print("\n" + "="*60)
         print("[Step 1] INTENT PARSED")
@@ -214,14 +233,36 @@ class RecommendationService:
         if cached_advice:
             latest = cached_advice[0]  # newest first
             if latest.medical_advice:
-                logger.debug("Using cached medical advice for user %d", ctx.user_id)
-                constraints = NutritionConstraints(
-                    notes=latest.medical_advice,
-                    avoid=_split_or_empty(latest.avoid),
-                    limit=_split_or_empty(latest.dietary_limit),
-                    constraints=_parse_constraints_str(latest.dietary_constraints),
+                # Invalidate cache when the user has updated health conditions
+                # more recently than the advice was last generated.
+                # ISO datetime strings compare lexicographically, which is correct.
+                profile_updated_at = ctx.user_data.get("profile_updated_at", "")
+                advice_updated_at  = latest.updated_at or latest.created_at or ""
+                cache_stale = (
+                    bool(profile_updated_at)
+                    and bool(advice_updated_at)
+                    and profile_updated_at > advice_updated_at
                 )
-                return self._apply_profile_data(constraints, ctx)
+                if cache_stale:
+                    logger.info(
+                        "Health conditions updated (%s) after last medical RAG run (%s)"
+                        " — invalidating cache for user %d",
+                        profile_updated_at, advice_updated_at, ctx.user_id,
+                    )
+                    print(
+                        f"[Step 2] MEDICAL CACHE INVALIDATED"
+                        f" (profile updated {profile_updated_at},"
+                        f" advice from {advice_updated_at}) — re-running RAG"
+                    )
+                else:
+                    logger.debug("Using cached medical advice for user %d", ctx.user_id)
+                    constraints = NutritionConstraints(
+                        notes=latest.medical_advice,
+                        avoid=_split_or_empty(latest.avoid),
+                        limit=_split_or_empty(latest.dietary_limit),
+                        constraints=_parse_constraints_str(latest.dietary_constraints),
+                    )
+                    return self._apply_profile_data(constraints, ctx)
 
         # Fall back to Medical RAG — gracefully degrade if it's unavailable
         try:
@@ -241,13 +282,13 @@ class RecommendationService:
     def _apply_profile_data(
         self, constraints: NutritionConstraints, ctx: SessionContext,
     ) -> NutritionConstraints:
-        """Merge saved profile restrictions/avoid foods into constraints.
+        """Merge saved medical avoid-lists into constraints.
 
-        Ensures that foods the user must avoid (from their medical history) and
-        dietary restrictions (e.g. vegan, gluten-free from their profile) are
-        always included, even if they weren't mentioned in the current message.
+        Dietary restrictions (vegan, gluten-free, etc.) are merged into
+        intent.restrictions upstream so they appear correctly in the augmented
+        query. This method only handles the medical avoid-foods list, which
+        comes from the user's medical history records.
         """
-        saved_restrictions = ctx.user_data.get("restrictions", [])
         raw_avoid = ctx.user_data.get("avoid", [])
 
         # user_data["avoid"] may be list[str] where each item is comma-separated
@@ -259,16 +300,15 @@ class RecommendationService:
                 flat_avoid.append(str(item))
 
         merged_avoid = list(dict.fromkeys(constraints.avoid + flat_avoid))
-        merged_limit = list(dict.fromkeys(constraints.limit + saved_restrictions))
 
-        if merged_avoid == constraints.avoid and merged_limit == constraints.limit:
+        if merged_avoid == constraints.avoid:
             return constraints
 
         return NutritionConstraints(
             dietary_goals=constraints.dietary_goals,
             foods_to_increase=constraints.foods_to_increase,
             avoid=merged_avoid,
-            limit=merged_limit,
+            limit=constraints.limit,
             constraints=constraints.constraints,
             notes=constraints.notes,
         )
@@ -279,21 +319,56 @@ class RecommendationService:
         conditions: list[str],
         constraints: NutritionConstraints,
     ) -> None:
-        """Persist Medical RAG result to DB so it can be cached on next request."""
+        """Persist Medical RAG result to DB so it can be cached on next request.
+
+        If a medical_advice row already exists for this user, UPDATE the advice
+        text fields (medical_advice, avoid, dietary_limit, health_condition) and
+        preserve any manually-edited dietary_constraints.  If no row exists,
+        INSERT a new one with all fields from the RAG result.
+
+        This avoids duplicate rows accumulating every time the cache check misses
+        because a previous record had an empty medical_advice field (e.g. created
+        by the profile-edit endpoint before RAG had ever run for this user).
+        """
         import json
         from domain.entities import MedicalAdvice
 
-        advice = MedicalAdvice(
-            user_id=ctx.user_id,
-            health_condition=", ".join(conditions),
-            medical_advice=constraints.notes,
-            avoid=", ".join(constraints.avoid),
-            dietary_limit=", ".join(constraints.limit),
-            dietary_constraints=json.dumps(constraints.constraints) if constraints.constraints else "",
+        health_condition     = ", ".join(conditions)
+        medical_advice_text  = constraints.notes
+        avoid_text           = ", ".join(constraints.avoid)
+        dietary_limit_text   = ", ".join(constraints.limit)
+        dietary_constraints_text = (
+            json.dumps(constraints.constraints) if constraints.constraints else ""
         )
+
         try:
-            await self._medical_repo.save(advice)
-            logger.info("Saved medical advice to DB for user %d", ctx.user_id)
+            existing = await self._medical_repo.get_by_user(ctx.user_id)
+            if existing:
+                # Update advice text fields; the SQL CASE in update_advice_fields
+                # preserves any user-edited dietary_constraints.
+                await self._medical_repo.update_advice_fields(
+                    existing[0].id,
+                    health_condition=health_condition,
+                    medical_advice=medical_advice_text,
+                    avoid=avoid_text,
+                    dietary_limit=dietary_limit_text,
+                    dietary_constraints=dietary_constraints_text,
+                )
+                logger.info(
+                    "Updated medical advice (id=%d) for user %d",
+                    existing[0].id, ctx.user_id,
+                )
+            else:
+                advice = MedicalAdvice(
+                    user_id=ctx.user_id,
+                    health_condition=health_condition,
+                    medical_advice=medical_advice_text,
+                    avoid=avoid_text,
+                    dietary_limit=dietary_limit_text,
+                    dietary_constraints=dietary_constraints_text,
+                )
+                await self._medical_repo.save(advice)
+                logger.info("Saved new medical advice for user %d", ctx.user_id)
         except Exception:
             logger.exception("Failed to save medical advice — continuing without save")
 

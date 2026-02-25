@@ -642,6 +642,11 @@ class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   const _MessageBubble({required this.message});
 
+  static String _filename(String path) {
+    final name = path.split('/').last.split('\\').last;
+    return name.length > 32 ? '${name.substring(0, 29)}...' : name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isUser = message.isUser;
@@ -687,9 +692,37 @@ class _MessageBubble extends StatelessWidget {
                 ],
               ),
               child: isUser
-                  ? Text(
-                      message.text,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (message.imagePath != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.image_outlined, size: 14, color: Colors.white70),
+                                const SizedBox(width: 5),
+                                Text(
+                                  _filename(message.imagePath!),
+                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (message.text.isNotEmpty) const SizedBox(height: 6),
+                        ],
+                        if (message.text.isNotEmpty)
+                          Text(
+                            message.text,
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                      ],
                     )
                   : MarkdownBody(
                       data: message.text,

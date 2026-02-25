@@ -47,6 +47,39 @@ class SQLiteMedicalRepository:
             )
             return [self._row_to_advice(r) for r in rows]
 
+    async def update_advice_fields(
+        self,
+        advice_id: int,
+        health_condition: str,
+        medical_advice: str,
+        avoid: str,
+        dietary_limit: str,
+        dietary_constraints: str,
+    ) -> None:
+        """Update RAG-generated text fields on an existing record.
+
+        Preserves the existing dietary_constraints value if it is already set
+        (i.e. user manually edited it), and only fills it from the RAG result
+        when the column is empty.
+        """
+        async with self._conn.acquire() as conn:
+            await conn.execute(
+                """UPDATE medical_advice
+                   SET health_condition     = ?,
+                       medical_advice       = ?,
+                       avoid                = ?,
+                       dietary_limit        = ?,
+                       dietary_constraints  = CASE
+                           WHEN dietary_constraints IS NULL OR dietary_constraints = ''
+                           THEN ? ELSE dietary_constraints END,
+                       updated_at           = ?
+                   WHERE id = ?""",
+                (
+                    health_condition, medical_advice, avoid, dietary_limit,
+                    dietary_constraints, datetime.now().isoformat(), advice_id,
+                ),
+            )
+
     async def update_field(self, advice_id: int, field: str, value: str) -> None:
         allowed_fields = {"health_condition", "medical_advice", "dietary_limit", "avoid", "dietary_constraints"}
         if field not in allowed_fields:

@@ -137,6 +137,10 @@ class ProfileService:
             user_data["restrictions"] = [
                 r.strip() for r in latest.restrictions.split(",") if r.strip()
             ]
+            # Expose the profile's last-modified timestamp so the recommendation
+            # service can detect when health conditions have changed since the
+            # cached medical advice was last generated.
+            user_data["profile_updated_at"] = latest.updated_at or latest.created_at
 
         if medical:
             avoid = [m.avoid for m in medical if m.avoid]
