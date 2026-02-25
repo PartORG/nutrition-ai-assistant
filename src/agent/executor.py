@@ -124,6 +124,25 @@ class AgentExecutor:
         # below only triggers for a tool called *this* turn.
         ctx.scratch.pop("_last_tool_call", None)
 
+        # ── Fast-path: programmatic image routing ────────────────────────────
+        # When the message contains an [IMAGE:...] tag we bypass the LLM tool-
+        # selection step entirely and invoke analyze_image directly.  This is
+        # more reliable than prompt instructions alone because the LLM may
+        # still choose search_recipes when the user's text sounds like a recipe
+        # request even though an image is attached.
+        image_fast_path = await _route_image_if_present(user_input, ctx, self._tools)
+        if image_fast_path is not None:
+            output = image_fast_path
+            self._memory.add_user_message(user_input)
+            self._memory.add_ai_message(output)
+            if self._chat_history_service:
+                try:
+                    await self._chat_history_service.save_user_message(ctx, user_input)
+                    await self._chat_history_service.save_assistant_message(ctx, output)
+                except Exception:
+                    pass
+            return output
+
         loop = asyncio.get_event_loop()
         try:
             response = await loop.run_in_executor(
@@ -265,6 +284,36 @@ def _build_health_context(ctx: SessionContext) -> str:
         lines.append(f"- Food preferences: {', '.join(preferences)}")
     lines.append("Keep these constraints in mind for every recipe recommendation.")
     return "\n".join(lines)
+
+
+async def _route_image_if_present(
+    user_input: str,
+    ctx: SessionContext,
+    tools: "ToolRegistry",
+) -> str | None:
+    """Programmatic fast-path: if user_input contains [IMAGE:...] invoke analyze_image directly.
+
+    Returns the tool output string when an image was found and the tool exists,
+    otherwise returns None so the normal LLM routing proceeds.
+    """
+    path_match = re.search(r"\[IMAGE:([^\]]+)\]", user_input, re.IGNORECASE)
+    if path_match is None:
+        return None
+
+    if "analyze_image" not in tools.names():
+        return None
+
+    image_path = path_match.group(1).strip()
+    logger.info(
+        "Image fast-path triggered for user %d — invoking analyze_image directly (path=%s)",
+        ctx.user_id, image_path,
+    )
+    print(f"[ImageFastPath] Detected [IMAGE:...] — routing directly to analyze_image (skipping LLM)")
+    try:
+        return await tools.invoke("analyze_image", ctx, image_path=image_path)
+    except Exception:
+        logger.exception("Image fast-path failed — falling back to normal LLM routing")
+        return None
 
 
 async def _try_raw_tool_call_fallback(

@@ -29,6 +29,16 @@ class DietaryConstraintsUpdateRequest(BaseModel):
     dietary_constraints: str
 
 
+class PreferencesUpdateRequest(BaseModel):
+    """Request body for updating food preferences."""
+    preferences: str
+
+
+class RestrictionsUpdateRequest(BaseModel):
+    """Request body for updating dietary restrictions / dislikes."""
+    restrictions: str
+
+
 async def _gather(*coros):
     """Run multiple coroutines concurrently."""
     return await asyncio.gather(*coros)
@@ -123,16 +133,62 @@ async def update_health(
 ):
     """Update health conditions in the latest profile history."""
     from infrastructure.persistence.profile_repo import SQLiteProfileRepository
+    from domain.entities import UserProfileHistory
     profile_repo = SQLiteProfileRepository(factory._connection)
 
     profiles = await profile_repo.get_by_user(user.user_id)
     if not profiles:
-        return {"error": "No profile found"}
-
-    latest = profiles[0]
-    await profile_repo.update_field(latest.id, "health_condition", data.health_condition)
+        await profile_repo.save(UserProfileHistory(
+            user_id=user.user_id, health_condition=data.health_condition,
+        ))
+    else:
+        await profile_repo.update_field(profiles[0].id, "health_condition", data.health_condition)
 
     return {"message": "Health conditions updated successfully"}
+
+
+@router.post("/update-preferences")
+async def update_preferences(
+    data: PreferencesUpdateRequest,
+    user: CurrentUser = Depends(get_current_user),
+    factory: ServiceFactory = Depends(get_factory),
+):
+    """Update food preferences in the latest profile history."""
+    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
+    from domain.entities import UserProfileHistory
+    profile_repo = SQLiteProfileRepository(factory._connection)
+
+    profiles = await profile_repo.get_by_user(user.user_id)
+    if not profiles:
+        await profile_repo.save(UserProfileHistory(
+            user_id=user.user_id, preferences=data.preferences,
+        ))
+    else:
+        await profile_repo.update_field(profiles[0].id, "preferences", data.preferences)
+
+    return {"message": "Preferences updated successfully"}
+
+
+@router.post("/update-restrictions")
+async def update_restrictions(
+    data: RestrictionsUpdateRequest,
+    user: CurrentUser = Depends(get_current_user),
+    factory: ServiceFactory = Depends(get_factory),
+):
+    """Update dietary restrictions / dislikes in the latest profile history."""
+    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
+    from domain.entities import UserProfileHistory
+    profile_repo = SQLiteProfileRepository(factory._connection)
+
+    profiles = await profile_repo.get_by_user(user.user_id)
+    if not profiles:
+        await profile_repo.save(UserProfileHistory(
+            user_id=user.user_id, restrictions=data.restrictions,
+        ))
+    else:
+        await profile_repo.update_field(profiles[0].id, "restrictions", data.restrictions)
+
+    return {"message": "Restrictions updated successfully"}
 
 
 @router.post("/update-dietary-constraints")
