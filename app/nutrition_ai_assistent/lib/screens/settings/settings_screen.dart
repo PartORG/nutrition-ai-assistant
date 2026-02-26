@@ -11,7 +11,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  String _displayName = '';
+  String _firstName = '';
+  String _surname = '';
   String _username = '';
 
   @override
@@ -27,14 +28,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       final userMap = profileData['user'] as Map<String, dynamic>?;
       if (userMap != null) {
-        final firstName = (userMap['name'] as String? ?? '').trim();
-        final lastName = (userMap['surname'] as String? ?? '').trim();
-        final fullName = [firstName, lastName]
-            .where((s) => s.isNotEmpty)
-            .join(' ');
         final username = (userMap['user_name'] as String? ?? '').trim();
         setState(() {
-          _displayName = fullName.isNotEmpty ? fullName : username;
+          _firstName = (userMap['name'] as String? ?? '').trim();
+          _surname = (userMap['surname'] as String? ?? '').trim();
           _username = username;
         });
       }
@@ -45,7 +42,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final username = await storage.getUsername();
       if (!mounted) return;
       setState(() {
-        _displayName = name ?? '';
+        _firstName = name ?? '';
+        _surname = '';
         _username = username ?? '';
       });
     }
@@ -68,8 +66,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.person_outline,
                         color: AppColors.primary),
-                    title: Text(
-                      _displayName.isNotEmpty ? _displayName : '—',
+                    title: Row(
+                      children: [
+                        Text(_firstName.isNotEmpty ? _firstName : '—'),
+                        if (_surname.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(_surname),
+                        ],
+                      ],
                     ),
                   ),
                   const Divider(height: 1),

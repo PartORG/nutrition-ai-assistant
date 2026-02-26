@@ -16,7 +16,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loading = true;
   String? _error;
 
-  String _displayName = '';
+  String _firstName = '';
+  String _surname = '';
   String _username = '';
   int _age = 0;
   String _gender = '';
@@ -34,7 +35,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _editingRestrictions = false;
 
   // Edit controllers — initialized at declaration so hot-reload never leaves them unset
-  final _nameController        = TextEditingController();
+  final _firstNameController    = TextEditingController();
+  final _surnameController      = TextEditingController();
   final _ageController         = TextEditingController();
   final _genderController      = TextEditingController();
   final _caretakerController   = TextEditingController();
@@ -51,7 +53,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _surnameController.dispose();
     _ageController.dispose();
     _genderController.dispose();
     _caretakerController.dispose();
@@ -72,15 +75,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         final userMap = profileData['user'] as Map<String, dynamic>?;
         if (userMap != null) {
-          final firstName = (userMap['name'] as String? ?? '').trim();
-          final lastName  = (userMap['surname'] as String? ?? '').trim();
-          _displayName = [firstName, lastName].where((s) => s.isNotEmpty).join(' ');
+          _firstName = (userMap['name'] as String? ?? '').trim();
+          _surname   = (userMap['surname'] as String? ?? '').trim();
           _username  = (userMap['user_name'] as String? ?? '').trim();
           _age       = userMap['age'] as int? ?? 0;
           _gender    = (userMap['gender'] as String? ?? '').trim();
           _caretaker = (userMap['caretaker'] as String? ?? '').trim();
         }
-        if (_displayName.isEmpty) _displayName = _username.isNotEmpty ? _username : 'User';
 
         final profiles = profileData['profiles'] as List? ?? [];
         if (profiles.isNotEmpty) {
@@ -109,7 +110,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _initializeControllers() {
-    _nameController.text      = _displayName;
+    _firstNameController.text  = _firstName;
+    _surnameController.text     = _surname;
     _ageController.text       = _age > 0 ? _age.toString() : '';
     _genderController.text    = _gender;
     _caretakerController.text = _caretaker;
@@ -125,14 +127,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _saveHeaderChanges() async {
     try {
       await AppServices.instance.api.post('/api/update', {
-        'name':     _nameController.text,
+        'name':     _firstNameController.text,
+        'surname':  _surnameController.text,
         'age':      int.tryParse(_ageController.text) ?? 0,
         'gender':   _genderController.text,
         'caretaker': _caretakerController.text,
       }, auth: true);
       if (!mounted) return;
       setState(() {
-        _displayName = _nameController.text;
+        _firstName = _firstNameController.text;
+        _surname   = _surnameController.text;
         _age         = int.tryParse(_ageController.text) ?? 0;
         _gender      = _genderController.text;
         _caretaker   = _caretakerController.text;
@@ -333,8 +337,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 12),
             if (!_editingHeader) ...[
-              Text(_displayName,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_firstName.isNotEmpty ? _firstName : (_username.isNotEmpty ? _username : 'User'),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  if (_surname.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(_surname,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  ],
+                ],
+              ),
               if (_username.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text('@$_username',
@@ -368,7 +382,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ] else ...[
-              _buildTextField(_nameController, 'Full Name'),
+              Row(children: [
+                Expanded(child: _buildTextField(_firstNameController, 'First Name')),
+                const SizedBox(width: 12),
+                Expanded(child: _buildTextField(_surnameController, 'Last Name')),
+              ]),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(child: _buildTextField(_ageController, 'Age', keyboardType: TextInputType.number)),
