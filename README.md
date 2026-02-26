@@ -229,6 +229,7 @@ ollama pull llava
 
 ```bash
 cd services/yolo_detector
+deactivate                      # deactivating virtual environment first
 .venv\Scripts\activate          # Windows
 # source .venv/bin/activate     # macOS / Linux
 
