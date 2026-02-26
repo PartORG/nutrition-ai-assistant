@@ -170,7 +170,7 @@ class SQLiteAnalyticsRepository:
                 for r in daily_rows
             ]
 
-            # Recent saved recipes joined with their nutrition (last 10)
+            # Recent saved recipes joined with their nutrition (last 8)
             recipe_rows = await conn.execute_fetchall(
                 """SELECT rh.id, rh.recipe_name, rh.created_at,
                           nh.calories, nh.protein, nh.fat, nh.carbohydrates, nh.fiber, nh.sodium,
@@ -183,7 +183,7 @@ class SQLiteAnalyticsRepository:
                       AND (nh.deleted_at = '' OR nh.deleted_at IS NULL)
                    WHERE rh.user_id = ? AND (rh.deleted_at = '' OR rh.deleted_at IS NULL)
                    ORDER BY rh.created_at DESC
-                   LIMIT 10
+                   LIMIT 8
                 """,
                 (user_id,),
             )

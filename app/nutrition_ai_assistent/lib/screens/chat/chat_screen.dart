@@ -27,13 +27,15 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   bool get _isCameraSupported {
     if (kIsWeb) return true;
-    return Platform.isAndroid || Platform.isIOS || Platform.isWindows || Platform.isMacOS;
+    return Platform.isAndroid ||
+        Platform.isIOS ||
+        Platform.isWindows ||
+        Platform.isMacOS;
   }
 
   bool _connected = false;
   bool _connecting = false;
   bool _waitingForResponse = false;
-  bool _historyLoaded = false;
   bool _uploadingImage = false;
 
   // Server path of an uploaded image waiting to be sent with the next message
@@ -92,10 +94,6 @@ class _ChatScreenState extends State<ChatScreen> {
         },
       );
       if (mounted) setState(() => _connected = true);
-      if (!_historyLoaded) {
-        _historyLoaded = true;
-        await _loadHistory();
-      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -110,34 +108,6 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     } finally {
       if (mounted) setState(() => _connecting = false);
-    }
-  }
-
-  Future<void> _loadHistory() async {
-    try {
-      final data = await AppServices.instance.api.get(
-        '/api/chat/history?hours=24',
-      );
-      final rawMessages = data['messages'] as List<dynamic>? ?? [];
-      if (!mounted || rawMessages.isEmpty) return;
-
-      final history = rawMessages
-          .map(
-            (m) => ChatMessage(
-              text: (m['content'] as String?) ?? '',
-              isUser: (m['role'] as String?) == 'user',
-            ),
-          )
-          .toList();
-
-      setState(() {
-        _messages
-          ..clear()
-          ..addAll(history);
-      });
-      _scrollToBottom();
-    } catch (_) {
-      // Best-effort — silently ignore if history is unavailable
     }
   }
 
@@ -698,7 +668,10 @@ class _MessageBubble extends StatelessWidget {
                       children: [
                         if (message.imagePath != null) ...[
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(10),
@@ -706,21 +679,32 @@ class _MessageBubble extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.image_outlined, size: 14, color: Colors.white70),
+                                const Icon(
+                                  Icons.image_outlined,
+                                  size: 14,
+                                  color: Colors.white70,
+                                ),
                                 const SizedBox(width: 5),
                                 Text(
                                   _filename(message.imagePath!),
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          if (message.text.isNotEmpty) const SizedBox(height: 6),
+                          if (message.text.isNotEmpty)
+                            const SizedBox(height: 6),
                         ],
                         if (message.text.isNotEmpty)
                           Text(
                             message.text,
-                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                           ),
                       ],
                     )
