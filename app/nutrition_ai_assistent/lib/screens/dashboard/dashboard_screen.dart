@@ -1006,10 +1006,13 @@ class _RecipeTile extends StatelessWidget {
   String _formatDate(String iso) {
     try {
       final dt = DateTime.parse(iso).toLocal();
-      final diff = DateTime.now().difference(dt);
-      if (diff.inDays == 0) return 'Today';
-      if (diff.inDays == 1) return 'Yesterday';
-      if (diff.inDays < 7) return '${diff.inDays} days ago';
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final saved = DateTime(dt.year, dt.month, dt.day);
+      final diff = today.difference(saved).inDays;
+      if (diff == 0) return 'Today';
+      if (diff == 1) return 'Yesterday';
+      if (diff < 7) return '$diff days ago';
       return '${dt.day}/${dt.month}/${dt.year}';
     } catch (_) { return ''; }
   }
