@@ -21,7 +21,7 @@ class ApiException implements Exception {
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:9000',
+    defaultValue: 'http://88.153.40.79:9000',
   );
 
   final StorageService _storage;

@@ -126,6 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return RefreshIndicator(
       onRefresh: _loadData,
       child: SingleChildScrollView(
@@ -136,7 +137,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             _buildGreetingCard(context),
             const SizedBox(height: 16),
-            _buildGoalsRow(context),
+            _buildGoalsRow(context, isMobile),
             const SizedBox(height: 16),
             _buildNutritionCard(context, _nutritionTotal),
             const SizedBox(height: 16),
@@ -145,16 +146,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 16),
             ],
             if (_recentRecipes.isNotEmpty) ...[
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(flex: 3, child: _buildRecentRecipes(context)),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 1, child: _buildSavedRecipesStat(context)),
-                  ],
+              if (isMobile) ...[
+                _buildRecentRecipes(context),
+                const SizedBox(height: 12),
+                _buildSavedRecipesStat(context),
+              ] else
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 3, child: _buildRecentRecipes(context)),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 1, child: _buildSavedRecipesStat(context)),
+                    ],
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
             ],
             _buildTipCard(context),
@@ -250,7 +256,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ─── Goals row (Dietary Goals + My Meals) ─────────────────────────────────
-  Widget _buildGoalsRow(BuildContext context) {
+  Widget _buildGoalsRow(BuildContext context, bool isMobile) {
+    if (isMobile) {
+      return Column(
+        children: [
+          _buildDietaryGoalsCard(context),
+          const SizedBox(height: 12),
+          _buildMyMealsCard(context),
+        ],
+      );
+    }
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
