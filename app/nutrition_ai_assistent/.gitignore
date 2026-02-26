@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local dart-define secrets (API keys, IPs, etc.) — never commit this file
+dart_defines/local.json
