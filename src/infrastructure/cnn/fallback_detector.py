@@ -66,26 +66,19 @@ class FallbackIngredientDetector:
                 self._primary.detect(image_path),
                 timeout=self._timeout,
             )
-            if len(result.ingredients) > 1:
+            if len(result.ingredients) > 0:
                 logger.info(
                     "YOLO detected %d ingredient(s) — using YOLO result",
                     len(result.ingredients),
                 )
                 return result
 
-            # YOLO found 0 or 1 ingredient — not enough for a useful recipe search.
+            # YOLO found 0 ingredient — not enough for a useful recipe search.
             # Fall back to LLaVA which describes the full image in natural language.
-            if result.ingredients:
-                logger.info(
-                    "YOLO returned only 1 ingredient ('%s') for %s "
-                    "— falling back to LLaVA for richer detection",
-                    result.ingredients[0], image_path,
-                )
-            else:
-                logger.info(
-                    "YOLO returned 0 ingredients for %s — falling back to LLaVA",
-                    image_path,
-                )
+            logger.info(
+                "YOLO returned 0 ingredients for %s — falling back to LLaVA",
+                image_path,
+            )
 
         except asyncio.TimeoutError:
             logger.warning(
