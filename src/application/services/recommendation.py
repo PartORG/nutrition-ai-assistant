@@ -238,22 +238,53 @@ class RecommendationService:
                 # ISO datetime strings compare lexicographically, which is correct.
                 profile_updated_at = ctx.user_data.get("profile_updated_at", "")
                 advice_updated_at  = latest.updated_at or latest.created_at or ""
-                cache_stale = (
+                # Also treat cache as stale when stored text is raw unparsed LLM
+                # output — either wrapped in markdown code fences (```json```)
+                # or stored as a raw JSON blob (old code stored the full JSON
+                # response instead of just the notes field).
+                _raw = latest.medical_advice.strip()
+                advice_is_corrupt = _raw.startswith("```") or (
+                    _raw.startswith("{") and '"dietary_goals"' in _raw
+                )
+                cache_stale = advice_is_corrupt or (
                     bool(profile_updated_at)
                     and bool(advice_updated_at)
                     and profile_updated_at > advice_updated_at
                 )
                 if cache_stale:
+                    reason = (
+                        "corrupt cached advice (raw LLM output)"
+                        if advice_is_corrupt
+                        else f"profile updated {profile_updated_at}, advice from {advice_updated_at}"
+                    )
                     logger.info(
-                        "Health conditions updated (%s) after last medical RAG run (%s)"
-                        " — invalidating cache for user %d",
-                        profile_updated_at, advice_updated_at, ctx.user_id,
+                        "Medical cache stale for user %d (%s) — re-running RAG",
+                        ctx.user_id, reason,
                     )
-                    print(
-                        f"[Step 2] MEDICAL CACHE INVALIDATED"
-                        f" (profile updated {profile_updated_at},"
-                        f" advice from {advice_updated_at}) — re-running RAG"
-                    )
+                    print(f"[Step 2] MEDICAL CACHE INVALIDATED ({reason}) — re-running RAG")
+
+                    # If the record is corrupt (raw JSON blob), parse and repair
+                    # the DB record immediately.  When only the storage format is
+                    # wrong and health conditions haven't changed since the advice
+                    # was generated, we can use the repaired data right away
+                    # without an expensive RAG call.
+                    if advice_is_corrupt:
+                        fixed = _try_parse_corrupt_advice(latest.medical_advice)
+                        if fixed is not None:
+                            await self._save_medical_advice_to_db(ctx, all_conditions, fixed)
+                            conditions_unchanged = not (
+                                bool(profile_updated_at)
+                                and bool(advice_updated_at)
+                                and profile_updated_at > advice_updated_at
+                            )
+                            if conditions_unchanged:
+                                logger.info(
+                                    "Repaired corrupt medical advice for user %d"
+                                    " — reusing without re-running RAG",
+                                    ctx.user_id,
+                                )
+                                return self._apply_profile_data(fixed, ctx)
+                        # Parse failed or conditions changed → fall through to RAG
                 else:
                     logger.debug("Using cached medical advice for user %d", ctx.user_id)
                     constraints = NutritionConstraints(
@@ -629,3 +660,49 @@ def _parse_constraints_str(value: Optional[str]) -> dict:
         return json.loads(value)
     except (json.JSONDecodeError, TypeError):
         return {}
+
+
+def _try_parse_corrupt_advice(raw: str) -> Optional[NutritionConstraints]:
+    """Try to parse a corrupt medical_advice DB value into NutritionConstraints.
+
+    Handles two legacy storage formats:
+    - Markdown-fenced JSON:  ```json\\n{...}\\n```
+    - Raw JSON blob stored directly in the medical_advice column
+
+    Returns None if the text cannot be parsed.
+    """
+    import json
+    import re
+
+    text = raw.strip()
+    # Strip markdown code fences
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        # Last resort: find the first {...} block
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return None
+        try:
+            data = json.loads(match.group())
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    if not isinstance(data, dict):
+        return None
+
+    goals = data.get("dietary_goals", [])
+    if isinstance(goals, str):
+        goals = [goals]
+
+    return NutritionConstraints(
+        dietary_goals=goals,
+        foods_to_increase=data.get("foods_to_increase", []),
+        avoid=data.get("avoid", []),
+        limit=data.get("limit", []),
+        constraints=data.get("constraints", {}),
+        notes=data.get("notes", ""),
+    )

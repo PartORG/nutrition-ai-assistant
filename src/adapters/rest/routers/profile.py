@@ -133,6 +133,7 @@ async def update_health(
 ):
     """Update health conditions in the latest profile history."""
     from infrastructure.persistence.profile_repo import SQLiteProfileRepository
+    from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
     from domain.entities import UserProfileHistory
     profile_repo = SQLiteProfileRepository(factory._connection)
 
@@ -143,6 +144,24 @@ async def update_health(
         ))
     else:
         await profile_repo.update_field(profiles[0].id, "health_condition", data.health_condition)
+
+    # Invalidate medical advice cache so RAG re-runs on the next recommendation
+    # request with the updated health conditions.
+    # We clear the generated text fields (medical_advice, avoid, dietary_limit)
+    # so the cache-miss path triggers a fresh RAG run, while preserving any
+    # dietary_constraints the user has manually edited (the CASE in
+    # update_advice_fields keeps non-empty dietary_constraints intact).
+    medical_repo = SQLiteMedicalRepository(factory._connection)
+    existing_advice = await medical_repo.get_by_user(user.user_id)
+    if existing_advice:
+        await medical_repo.update_advice_fields(
+            existing_advice[0].id,
+            health_condition=data.health_condition,
+            medical_advice="",
+            avoid="",
+            dietary_limit="",
+            dietary_constraints="",  # preserved by SQL CASE if already set
+        )
 
     return {"message": "Health conditions updated successfully"}
 

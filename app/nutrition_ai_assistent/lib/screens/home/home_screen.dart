@@ -21,6 +21,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// DashboardScreen knows it should reload its data.
   final _dashboardRefresh = ValueNotifier<int>(0);
 
+  /// Incremented every time the user navigates to the Profile tab so that
+  /// ProfileScreen reloads its data (medical advice may have been updated
+  /// in the background by the recommendation pipeline).
+  final _profileRefresh = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
@@ -30,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _dashboardRefresh.dispose();
+    _profileRefresh.dispose();
     super.dispose();
   }
 
@@ -60,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _switchTab(int index) {
     if (index == 0 && _currentIndex != 0) _dashboardRefresh.value++;
+    if (index == 2 && _currentIndex != 2) _profileRefresh.value++;
     setState(() => _currentIndex = index);
   }
 
@@ -92,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           DashboardScreen(refreshNotifier: _dashboardRefresh),
           const ChatScreen(),
-          const ProfileScreen(),
+          ProfileScreen(refreshNotifier: _profileRefresh),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
