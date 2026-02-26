@@ -1,0 +1,88 @@
+services:
+
+  # ── 1. Ollama ─────────────────────────────────────────────────────────────
+  # Runs LLaVA (image fallback), llama3.2 (RAG LLM), and embeddings.
+  # Pull models on first start:
+  #   docker exec -it nutriai-ollama ollama pull llava
+  #   docker exec -it nutriai-ollama ollama pull llama3.2
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nutriai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Add this section to enable GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1 # Number of GPUs to use, or use 'all'
+    #           capabilities: [gpu]
+    # restart: unless-stopped
+
+  # ── 2. YOLO Detector ──────────────────────────────────────────────────────
+  # Isolated Python environment with ultralytics, opencv-python-headless, torch.
+  # Place model weights in services/yolo_detector/models/ before building:
+  #   - food101_resnet18_best.pth  (your trained model)
+  #   - yolov8n.pt is auto-downloaded by ultralytics on first run
+  yolo-detector:
+    build:
+      context: ./services/yolo_detector
+      dockerfile: Dockerfile
+    container_name: nutriai-yolo
+    ports:
+      - "8001:8001"
+    volumes:
+      # Model weights — read-only mount from local models/ folder
+      - ./services/yolo_detector/models:/app/models:ro
+      # Shared upload directory — the main API saves images here and passes
+      # the path to YOLO so it can read the file directly (no base64 overhead)
+      - ./uploads:/app/uploads
+    environment:
+      - FOOD_MODEL_PATH=/app/models/food101_resnet18_best.pth
+      - YOLO_MODEL_PATH=yolov8n.pt
+      - CONF_THRESHOLD=0.3
+      - FOOD_CONF_THRESHOLD=0.4
+    restart: unless-stopped
+
+  # ── 3. Main API ───────────────────────────────────────────────────────────
+  # FastAPI application — src/ package. Calls ollama and yolo-detector.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nutriai-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Service URLs — use container names (Docker internal DNS)
+      - OLLAMA_BASE_URL=http://ollama:11434/
+      - YOLO_SERVICE_URL=http://yolo-detector:8001
+      # Detector: tries YOLO first, falls back to LLaVA if unavailable / empty
+      - CNN_DETECTOR_TYPE=yolo_with_fallback
+      # Point DB to the persistent volume
+      - DB_PATH=/app/db/users.db
+      # Shared upload directory (same path in both api and yolo-detector containers)
+      - UPLOAD_DIR=/app/uploads
+    volumes:
+      # Data directories (read-only)
+      - ./data:/app/data:ro
+      - ./data_test:/app/data_test:ro
+      - ./vector_databases:/app/vector_databases:ro
+      # Persistent database — bind mount so DBeaver can open ./db/users.db directly
+      - ./db:/app/db
+      # Shared upload directory — images uploaded via Flutter are saved here and
+      # the path is forwarded to the YOLO service which mounts the same volume
+      - ./uploads:/app/uploads
+    depends_on:
+      - ollama
+      - yolo-detector
+    restart: unless-stopped
+
+volumes:
+  # Ollama model weights (downloaded once, persisted across restarts)
+  ollama_data:

@@ -1,1 +1,0 @@
-# Typer + Rich app
