@@ -6,7 +6,9 @@ import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final ValueNotifier<int>? refreshNotifier;
+
+  const ProfileScreen({super.key, this.refreshNotifier});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -48,11 +50,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    widget.refreshNotifier?.addListener(_loadProfile);
     _loadProfile();
   }
 
   @override
   void dispose() {
+    widget.refreshNotifier?.removeListener(_loadProfile);
     _firstNameController.dispose();
     _surnameController.dispose();
     _ageController.dispose();
@@ -161,13 +165,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         auth: true,
       );
       if (!mounted) return;
-      setState(() {
-        _healthConditions = _healthController.text
-            .split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-        _editingHealth = false;
-      });
+      // Reload the full profile so _medicalAdvice reflects the server state
+      // (the backend clears the cached medical advice when health conditions
+      // change so it can be regenerated on the next recommendation request).
+      await _loadProfile();
+      if (!mounted) return;
+      setState(() => _editingHealth = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Health conditions updated successfully')));
+        const SnackBar(content: Text('Health conditions updated. Medical advice will refresh on your next recommendation.')));
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));

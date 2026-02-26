@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -190,11 +191,22 @@ RULES:
     def _parse_constraints_response(answer: Any) -> NutritionConstraints:
         """Parse LLM response into typed NutritionConstraints."""
         if isinstance(answer, str):
+            # Strip markdown code fences (```json ... ``` or ``` ... ```)
+            stripped = re.sub(r"^```(?:json)?\s*", "", answer.strip())
+            stripped = re.sub(r"\s*```$", "", stripped)
             try:
-                answer = json.loads(answer)
+                answer = json.loads(stripped)
             except (json.JSONDecodeError, TypeError):
-                logger.warning("Could not parse LLM response as JSON")
-                return NutritionConstraints(notes=answer)
+                # Fall back: try to extract a JSON object anywhere in the text
+                match = re.search(r"\{.*\}", stripped, re.DOTALL)
+                if match:
+                    try:
+                        answer = json.loads(match.group())
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if isinstance(answer, str):
+                    logger.warning("Could not parse LLM response as JSON")
+                    return NutritionConstraints(notes=answer)
 
         if not isinstance(answer, dict):
             return NutritionConstraints.default()
