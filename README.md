@@ -92,18 +92,18 @@ A full walkthrough video is available at [`demo_material/nutrition_ai_assistent_
                    │
 ┌──────────────────▼───────────────────────────────────────────────┐
 │  FastAPI Backend  (src/)                                  :9000  │
-│  ├─ LangChain agent with 8 tools                                │
-│  ├─ Medical RAG + Recipe RAG  (FAISS + BM25 hybrid)             │
-│  ├─ Safety filter, intent parser                                │
-│  └─ SQLite: users, recipes, nutrition, chat history             │
+│  ├─ LangChain agent with 8 tools                                 │
+│  ├─ Medical RAG + Recipe RAG  (FAISS + BM25 hybrid)              │
+│  ├─ Safety filter, intent parser                                 │
+│  └─ SQLite: users, recipes, nutrition, chat history              │
 └──────────┬──────────────────────────┬────────────────────────────┘
            │                          │
- ┌─────────▼───────────┐   ┌─────────▼───────────┐
- │  Ollama  :11434     │   │  YOLO Detector      │
- │  • llama3.2 (LLM)   │   │  :8001              │
- │  • llava (fallback)  │   │  • YOLOv8 detection │
- │  • embeddings        │   │  • Food101 ResNet18 │
- └─────────────────────┘   │  • Isolated env     │
+ ┌─────────▼───────────┐    ┌─────────▼───────────┐
+ │  Ollama  :11434     │    │  YOLO Detector      │
+ │  • llama3.2 (LLM)   │    │  :8001              │
+ │  • llava (fallback) │    │  • YOLOv8 detection │
+ │  • embeddings       │    │  • Food101 ResNet18 │
+ └─────────────────────┘    │  • Isolated env     │
                             └─────────────────────┘
 
 ┌──────────────────────────────────────────┐
@@ -143,7 +143,6 @@ nutrition-ai-assistant/
 ├── app/
 │   └── nutrition_ai_assistent/ # Flutter cross-platform client
 ├── data/                       # Demo recipe + nutrition CSVs
-├── data_test/                  # Test data and raw medical PDFs (private)
 ├── vector_databases/           # FAISS vector stores
 ├── db/                         # SQLite database (created at runtime)
 ├── uploads/                    # Shared image upload directory
