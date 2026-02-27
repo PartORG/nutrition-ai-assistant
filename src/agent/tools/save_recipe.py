@@ -123,14 +123,20 @@ class SaveRecipeTool(BaseTool):
         """Save the user's selected recipe(s), resolving by number or name."""
         rec_result: Optional[RecommendationResult] = ctx.scratch.get("last_recommendations")
 
-        if rec_result is None:
-            return ToolResult(
-                output="No recipes available. Please search for recipes first."
-            )
+        if rec_result is not None:
+            recipes = rec_result.safe_recipes
+        else:
+            # Fallback: use the recipe list cached from a previous session
+            # (restored from DB when the WebSocket reconnects).
+            recipes = ctx.scratch.get("_cached_safe_recipes", [])
 
-        recipes = rec_result.safe_recipes
         if not recipes:
-            return ToolResult(output="No recipes were found in the last search.")
+            return ToolResult(
+                output=(
+                    "No recipes available. Please search for recipes first "
+                    "(e.g. 'show me low-carb dinner ideas')."
+                )
+            )
 
         numbers: List[int] = list(recipe_numbers) if recipe_numbers else []
 

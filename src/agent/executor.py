@@ -13,7 +13,7 @@ import asyncio
 import json
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from langchain.agents import AgentExecutor as LangChainAgentExecutor
 from langchain.agents import create_tool_calling_agent
@@ -23,6 +23,7 @@ from langchain_core.language_models import BaseChatModel
 from application.context import SessionContext
 from agent.tools.registry import ToolRegistry  # also used in type hints below
 from agent.memory import ConversationMemory
+from domain.models import Recipe, NutritionValues
 
 if TYPE_CHECKING:
     from application.services.chat_history import ChatHistoryService
@@ -88,6 +89,43 @@ class AgentExecutor:
             return_intermediate_steps=True,
         )
 
+    async def _restore_recipe_cache(self, ctx: SessionContext) -> None:
+        """Load cached recipes from DB into ctx.scratch on session resume."""
+        if not self._chat_history_service:
+            return
+        try:
+            cache_json = await self._chat_history_service.load_recipe_cache(
+                ctx.conversation_id
+            )
+            if cache_json:
+                recipes = _deserialize_recipes(cache_json)
+                if recipes:
+                    ctx.scratch["_cached_safe_recipes"] = recipes
+                    logger.info(
+                        "Restored %d cached recipe(s) for conversation %s",
+                        len(recipes), ctx.conversation_id,
+                    )
+        except Exception:
+            logger.warning("Failed to restore recipe cache — continuing without it")
+
+    async def _persist_recipe_cache(self, ctx: SessionContext) -> None:
+        """Persist the current recipe list to DB so it survives reconnects."""
+        if not self._chat_history_service:
+            return
+        rec_result = ctx.scratch.get("last_recommendations")
+        if rec_result is None:
+            return
+        recipes = rec_result.safe_recipes
+        if not recipes:
+            return
+        try:
+            cache_json = _serialize_recipes(recipes)
+            await self._chat_history_service.save_recipe_cache(ctx, cache_json)
+        except Exception:
+            logger.warning(
+                "Failed to persist recipe cache — save may not work after reconnect"
+            )
+
     async def run(self, ctx: SessionContext, user_input: str) -> str:
         """Process a user message and return the agent's response.
 
@@ -108,6 +146,8 @@ class AgentExecutor:
             if self._chat_history_service:
                 await self._chat_history_service.ensure_conversation(ctx)
                 await self._memory.load_from_db(ctx.conversation_id)
+                # Restore recipe cache so save_recipe works even after reconnect
+                await self._restore_recipe_cache(ctx)
             self._executor = self._build_executor(ctx)
 
         logger.info(
@@ -141,6 +181,8 @@ class AgentExecutor:
                     await self._chat_history_service.save_assistant_message(ctx, output)
                 except Exception:
                     pass
+            # Persist recipe cache so save_recipe works after reconnect
+            await self._persist_recipe_cache(ctx)
             return output
 
         loop = asyncio.get_event_loop()
@@ -243,6 +285,9 @@ class AgentExecutor:
                 logger.exception(
                     "Failed to persist chat messages — continuing without save",
                 )
+
+        # Persist recipe cache so save_recipe works after reconnect
+        await self._persist_recipe_cache(ctx)
 
         logger.debug("Agent response: %s", output[:100])
         return output
@@ -410,3 +455,57 @@ async def _try_raw_tool_call_fallback(
     except Exception:
         logger.exception("Raw tool-call fallback failed for tool '%s'", tool_name)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Recipe cache serialization (for cross-session persistence)
+# ---------------------------------------------------------------------------
+
+def _serialize_recipes(recipes: List[Recipe]) -> str:
+    """Convert a list of Recipe objects to a JSON string for DB storage."""
+    return json.dumps([
+        {
+            "name": r.name,
+            "ingredients": list(r.ingredients),
+            "why_recommended": r.why_recommended,
+            "servings": r.servings,
+            "prep_time": r.prep_time,
+            "cook_instructions": r.cook_instructions,
+            "nutrition": {
+                "calories": r.nutrition.calories,
+                "protein_g": r.nutrition.protein_g,
+                "carbs_g": r.nutrition.carbs_g,
+                "fat_g": r.nutrition.fat_g,
+                "fiber_g": r.nutrition.fiber_g,
+                "sodium_mg": r.nutrition.sodium_mg,
+                "sugar_g": r.nutrition.sugar_g,
+            },
+        }
+        for r in recipes
+    ])
+
+
+def _deserialize_recipes(json_str: str) -> List[Recipe]:
+    """Reconstruct a list of Recipe objects from a JSON string."""
+    data = json.loads(json_str)
+    result: List[Recipe] = []
+    for d in data:
+        n = d.get("nutrition", {})
+        result.append(Recipe(
+            name=d.get("name", ""),
+            ingredients=d.get("ingredients", []),
+            why_recommended=d.get("why_recommended", ""),
+            servings=d.get("servings", 0),
+            prep_time=d.get("prep_time", ""),
+            cook_instructions=d.get("cook_instructions", ""),
+            nutrition=NutritionValues(
+                calories=n.get("calories"),
+                protein_g=n.get("protein_g"),
+                carbs_g=n.get("carbs_g"),
+                fat_g=n.get("fat_g"),
+                fiber_g=n.get("fiber_g"),
+                sodium_mg=n.get("sodium_mg"),
+                sugar_g=n.get("sugar_g"),
+            ),
+        ))
+    return result
