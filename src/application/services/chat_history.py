@@ -8,6 +8,7 @@ Used by AgentExecutor to persist conversations to DB.
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from domain.entities import Conversation, ChatMessage
 from domain.ports import ConversationRepository, ChatMessageRepository
@@ -99,6 +100,25 @@ class ChatHistoryService:
     ) -> list[Conversation]:
         """List all conversations for a user, newest first."""
         return await self._conversation_repo.get_by_user(user_id)
+
+    async def save_recipe_cache(self, ctx: SessionContext, cache_json: str) -> None:
+        """Persist the last recipe list to the conversation so it survives reconnects."""
+        try:
+            await self._conversation_repo.update_recipe_cache(ctx.conversation_id, cache_json)
+        except Exception:
+            logger.exception(
+                "Failed to save recipe cache for conversation %s", ctx.conversation_id
+            )
+
+    async def load_recipe_cache(self, conversation_id: str) -> Optional[str]:
+        """Return the cached recipe list JSON for a conversation, or None."""
+        try:
+            return await self._conversation_repo.get_recipe_cache(conversation_id)
+        except Exception:
+            logger.exception(
+                "Failed to load recipe cache for conversation %s", conversation_id
+            )
+            return None
 
     async def purge_old_data(self, user_id: int, cutoff_iso: str) -> None:
         """Soft-delete messages and conversations older than *cutoff_iso*.

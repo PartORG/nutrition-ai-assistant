@@ -144,5 +144,6 @@ async def run_migrations(connection: AsyncSQLiteConnection) -> None:
         # was introduced).
         # ------------------------------------------------------------------
         await _add_column_if_missing(conn, "recipe_history", "rating", "INTEGER")
+        await _add_column_if_missing(conn, "conversations", "recipe_cache", "TEXT")
 
     logger.info("All tables created (or already exist).")
