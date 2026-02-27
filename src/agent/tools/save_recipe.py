@@ -166,6 +166,12 @@ class SaveRecipeTool(BaseTool):
                 )
             )
 
+        # Turn-scoped dedup: prevent the LLM from calling save_recipe twice
+        # for the same recipe in one turn (e.g. first without rating, then with).
+        # Key includes request_id so the guard resets automatically each turn.
+        turn_key = f"_saved_{ctx.request_id}"
+        saved_this_turn: dict = ctx.scratch.setdefault(turn_key, {})
+
         saved_lines: List[str] = []
         errors: List[str] = []
 
@@ -174,7 +180,19 @@ class SaveRecipeTool(BaseTool):
                 errors.append(f"Recipe {num} — invalid number (choose 1–{len(recipes)})")
                 continue
             recipe = recipes[num - 1]
-            history_id = await self._manager.save_selection(ctx, recipe, rating)
+
+            if recipe.name in saved_this_turn:
+                # Duplicate call within this turn — skip the DB insert to avoid
+                # a duplicate row.  Reuse the history_id from the first call.
+                history_id = saved_this_turn[recipe.name]
+                logger.warning(
+                    "Duplicate save_recipe call for '%s' in turn %s — skipping DB insert",
+                    recipe.name, ctx.request_id,
+                )
+            else:
+                history_id = await self._manager.save_selection(ctx, recipe, rating)
+                saved_this_turn[recipe.name] = history_id
+
             saved_lines.append(_format_saved_recipe(recipe, num, history_id))
 
         if not saved_lines and errors:
