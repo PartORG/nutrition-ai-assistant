@@ -74,6 +74,27 @@ class SQLiteConversationRepository:
                 (title, conversation_id),
             )
 
+    async def update_recipe_cache(self, conversation_id: str, cache_json: str) -> None:
+        """Persist the last recipe list JSON to the conversation record."""
+        async with self._conn.acquire() as conn:
+            await conn.execute(
+                "UPDATE conversations SET recipe_cache = ? WHERE conversation_id = ?",
+                (cache_json, conversation_id),
+            )
+
+    async def get_recipe_cache(self, conversation_id: str) -> Optional[str]:
+        """Return the cached recipe list JSON for a conversation, or None."""
+        async with self._conn.acquire() as conn:
+            rows = await conn.execute_fetchall(
+                """SELECT recipe_cache FROM conversations
+                   WHERE conversation_id = ?
+                     AND (deleted_at = '' OR deleted_at IS NULL)""",
+                (conversation_id,),
+            )
+            if rows and rows[0][0]:
+                return rows[0][0]
+            return None
+
     async def soft_delete(self, conversation_id: str) -> None:
         async with self._conn.acquire() as conn:
             await conn.execute(
