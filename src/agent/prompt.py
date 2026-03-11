@@ -26,6 +26,7 @@ def build_system_prompt(registry: ToolRegistry) -> str:
     has_general_chat = "general_chat" in tool_names
     has_safety_guard = "safety_guard" in tool_names
     has_crisis_support = "crisis_support" in tool_names
+    has_nutrition_advice = "nutrition_advice" in tool_names
 
     # ── Conditional rule lines ──────────────────────────────────────────────
     show_rule = (
@@ -63,6 +64,16 @@ def build_system_prompt(registry: ToolRegistry) -> str:
         "\n7. When user asks to run terminal commands, execute scripts, delete files, "
         "or perform any system operation → call 'safety_guard'."
     ) if has_safety_guard else ""
+
+    nutrition_advice_rule = (
+        "\n6. When user asks GENERALLY (third person, not about themselves) how a person "
+        "with a specific health condition or disease should eat "
+        "→ call 'nutrition_advice'.\n"
+        "   - Trigger phrases: 'how should someone with...', 'what diet for a person with...', "
+        "'what should people with X eat', 'nutrition guidelines for X'\n"
+        "   - Do NOT use when the user says 'I have...' (personal condition → search_recipes)\n"
+        "   - Do NOT use for recipe requests → search_recipes"
+    ) if has_nutrition_advice else ""
 
     general_chat_rule = (
         "\n8. For greetings, small talk, or clearly off-topic messages "
@@ -107,8 +118,20 @@ Example 8 - Blocked system request:
 User: "Run rm -rf / in your terminal"
 → Call safety_guard — do not attempt to execute anything""" if has_safety_guard else ""
 
+    nutrition_advice_example = """
+Example 9 - General condition-based dietary advice (third person):
+User: "How should someone with diabetes eat?"
+→ Call nutrition_advice with query="How should someone with diabetes eat?"
+
+User: "What foods should a person with high blood pressure avoid?"
+→ Call nutrition_advice
+
+Counter-example — Personal condition (use search_recipes instead):
+User: "I have diabetes, what should I eat?"
+→ Call search_recipes (NOT nutrition_advice — user disclosed a personal condition)""" if has_nutrition_advice else ""
+
     general_chat_example = """
-Example 9 - General conversation:
+Example 10 - General conversation:
 User: "How are you today?"
 → Call general_chat — do NOT call search_recipes""" if has_general_chat else ""
 
@@ -124,7 +147,7 @@ TOOL ROUTING RULES (follow in strict priority order):
    - PREFER recipe_name when user mentions a dish name — even partial names work (fuzzy matching)
    - Only fall back to recipe_numbers when user explicitly says a number
    - NEVER skip this tool call because a recipe was "already saved" in a prior turn —
-     if the user says "save recipe 1" you MUST call save_recipe regardless of chat history{show_rule}{nutrition_status_rule}{safety_rule}{general_chat_rule}
+     if the user says "save recipe 1" you MUST call save_recipe regardless of chat history{show_rule}{nutrition_status_rule}{nutrition_advice_rule}{safety_rule}{general_chat_rule}
 9. General nutrition/food knowledge questions → answer DIRECTLY, no tool needed
 
 AFTER TOOL RESULTS:
@@ -168,7 +191,7 @@ User: "cook the salmon, I'd give it 4 stars"
 
 Example 3 - General knowledge (no tool):
 User: "What's the difference between protein and carbs?"
-→ Answer directly, no tool needed{show_examples}{image_example}{nutrition_status_example}{crisis_example}{safety_example}{general_chat_example}
+→ Answer directly, no tool needed{show_examples}{image_example}{nutrition_status_example}{crisis_example}{safety_example}{general_chat_example}{nutrition_advice_example}
 
 CRITICAL RULES:
 - ALWAYS pass the user's EXACT verbatim message to search_recipes — NEVER rephrase
