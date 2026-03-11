@@ -10,9 +10,12 @@ Supports selection by number (recipe_numbers=[2]) AND by name
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 from domain.models import Recipe
 from application.context import SessionContext
