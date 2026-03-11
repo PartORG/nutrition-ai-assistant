@@ -65,6 +65,7 @@ from agent.tools.general_chat import GeneralChatTool
 from agent.tools.nutrition_status import NutritionStatusTool
 from agent.tools.safety_guard import SafetyGuardTool
 from agent.tools.crisis_support import CrisisSupportTool
+from agent.tools.nutrition_advice import NutritionAdviceTool
 from agent.memory import ConversationMemory
 from agent.prompt import build_system_prompt
 from agent.executor import AgentExecutor
@@ -261,6 +262,7 @@ class ServiceFactory:
         registry.register(NutritionStatusTool(nutrition_repo, medical_repo))
         registry.register(SafetyGuardTool())
         registry.register(CrisisSupportTool())
+        registry.register(NutritionAdviceTool(self._medical_rag))
 
         # Build system prompt with registered tools
         system_prompt = build_system_prompt(registry)
