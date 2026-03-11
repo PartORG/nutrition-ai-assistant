@@ -46,11 +46,11 @@ class _ChatScreenState extends State<ChatScreen> {
     ChatMessage(
       text:
           'Hello! I\'m your NutriAI assistant. How can I help you today?\n\n'
-          '🔍 Search recipes — just tell me what you\'re craving or what ingredients you have\n'
-          '📋 Show recipe details — ask me to show any recipe for full instructions & nutrition info\n'
-          '💾 Save recipes — save your favorites to your collection\n'
-          '📊 Track your nutrition — ask how much you\'ve eaten today\n'
-          '🩺 Dietary advice — get guidance based on specific health conditions\n'
+          '🔍 Search recipes — just tell me what you\'re craving or what ingredients you have  \n'
+          '📋 Show recipe details — ask me to show any recipe for full instructions & nutrition info  \n'
+          '💾 Save recipes — save your favorites to your collection  \n'
+          '📊 Track your nutrition — ask how much you\'ve eaten today  \n'
+          '🩺 Dietary advice — get guidance based on specific health conditions  \n'
           '📸 Analyze food photos — send me an image and I\'ll suggest recipes\n\n'
           'Just type a message to get started!',
       isUser: false,
