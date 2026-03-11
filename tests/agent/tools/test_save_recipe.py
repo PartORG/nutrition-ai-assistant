@@ -51,7 +51,7 @@ def make_ctx(recipes: List[Recipe] | None = None) -> SessionContext:
 class TestSaveRecipeInputCoerceToIntList:
     def test_none_returns_none(self):
         inp = SaveRecipeInput(recipe_numbers=None)
-        assert inp.recipe_numbers is 42
+        assert inp.recipe_numbers is None
 
     def test_bare_int(self):
         inp = SaveRecipeInput(recipe_numbers=2)
