@@ -491,7 +491,78 @@ and almonds. Can you suggest a creative recipe?
 
 ## Testing and Quality
 
-Functional test scripts are located in `test_functionality/`:
+### Automated Tests (pytest)
+
+The automated test suite lives in `tests/` and is run with **pytest**.
+
+#### Install test dependencies
+
+The production `requirements.txt` excludes dev tooling. Install the test extras into your main virtual environment:
+
+```bash
+pip install pytest pytest-asyncio
+```
+
+#### Run the full suite
+
+```bash
+# From the project root, with the main venv activated
+pytest
+```
+
+pytest is pre-configured via `pytest.ini`:
+
+| Setting | Value | Effect |
+|---|---|---|
+| `testpaths` | `tests` | Only looks in the `tests/` directory |
+| `pythonpath` | `src` | Makes `src/` importable without `PYTHONPATH` |
+| `asyncio_mode` | `auto` | All `async def` test functions run automatically |
+| `addopts` | `--import-mode=importlib` | Reliable imports across all Python versions |
+
+#### Run a specific subset
+
+```bash
+# Single file
+pytest tests/domain/test_entities.py
+
+# Single test function
+pytest tests/agent/tools/test_save_recipe.py::test_save_recipe_success
+
+# All tests under a subdirectory
+pytest tests/agent/
+```
+
+#### Test layout
+
+```
+tests/
+├── conftest.py                          # Root fixtures (SessionContext, etc.)
+├── agent/tools/
+│   ├── test_save_recipe.py              # save_recipe tool
+│   ├── test_show_recipe.py              # show_recipe tool
+│   └── test_base.py                     # Shared tool base
+├── application/
+│   ├── services/
+│   │   ├── test_authentication.py       # Auth service
+│   │   └── test_recipe_manager.py       # Recipe manager service
+│   ├── test_context.py                  # SessionContext
+│   └── test_dto.py                      # DTOs / Pydantic models
+├── components/
+│   ├── conftest.py                      # Component-level fixtures
+│   └── test_safety_filter_rules.py      # Safety filter rules
+├── domain/
+│   ├── test_entities.py                 # Domain entities
+│   ├── test_exceptions.py               # Domain exceptions
+│   └── test_models.py                   # Domain models
+└── infrastructure/persistence/
+    └── test_migrations.py               # DB migration logic
+```
+
+---
+
+### Functional / Integration Scripts
+
+Manual functional test scripts are located in `test_functionality/`:
 
 | Script | Purpose |
 |---|---|
@@ -507,7 +578,7 @@ Functional test scripts are located in `test_functionality/`:
 | `test_recreate_vector_db.py` | Full vector store rebuild |
 | `test_add_dummy_user.py` | User creation test |
 
-Run individual scripts:
+These scripts require a running backend (Ollama, SQLite, vector stores). Run them individually:
 
 ```bash
 python test_functionality/test_agent.py
