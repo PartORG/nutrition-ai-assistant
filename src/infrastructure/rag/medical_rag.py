@@ -3,7 +3,7 @@ infrastructure.rag.medical_rag - Medical dietary constraint extraction from PDFs
 
 Implements MedicalRAGPort. Migrated from rags/medical_rag.py with:
     - get_constraints() returns NutritionConstraints (typed) instead of raw dict
-    - Async wrapper via run_in_executor
+    - Async wrapper via asyncio.to_thread
     - No sys.path.insert
 """
 
@@ -19,7 +19,9 @@ from typing import Any
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pydantic import BaseModel, Field
 
+from domain.exceptions import RAGError
 from domain.models import NutritionConstraints
 from infrastructure.config import DEFAULT_EMBEDDING_MODEL
 from infrastructure.rag.base_rag import BaseRAG
@@ -27,8 +29,62 @@ from infrastructure.rag.base_rag import BaseRAG
 logger = logging.getLogger(__name__)
 
 
+class _NutrientLimit(BaseModel):
+    """A single numeric bound. Either end may be absent."""
+
+    max: float | None = Field(default=None, description="Daily maximum, or null")
+    min: float | None = Field(default=None, description="Daily minimum, or null")
+
+
+class _ConstraintsSchema(BaseModel):
+    """Structured dietary constraints the LLM fills via with_structured_output.
+
+    Replaces fence-stripping plus a greedy regex over free text. That path
+    returned NutritionConstraints(notes=answer) on failure — empty avoid/limit
+    lists, which every downstream consumer reads as "this patient has no
+    dietary restrictions".
+    """
+
+    dietary_goals: list[str] = Field(
+        default_factory=list, description="Short summary points of the dietary goal"
+    )
+    foods_to_increase: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(
+        default_factory=list, description="Foods that must be completely excluded"
+    )
+    limit: list[str] = Field(
+        default_factory=list, description="Foods to reduce but not exclude"
+    )
+    sugar_g: _NutrientLimit = Field(default_factory=_NutrientLimit)
+    sodium_mg: _NutrientLimit = Field(default_factory=_NutrientLimit)
+    fiber_g: _NutrientLimit = Field(default_factory=_NutrientLimit)
+    protein_g: _NutrientLimit = Field(default_factory=_NutrientLimit)
+    saturated_fat_g: _NutrientLimit = Field(default_factory=_NutrientLimit)
+    notes: str = Field(default="", description="Additional important dietary notes")
+
+    def to_domain(self) -> NutritionConstraints:
+        """Flatten the per-nutrient limits back into the domain's dict shape."""
+        constraints: dict[str, dict[str, float]] = {}
+        for name in ("sugar_g", "sodium_mg", "fiber_g", "protein_g", "saturated_fat_g"):
+            limit: _NutrientLimit = getattr(self, name)
+            bounds = {k: v for k, v in limit.model_dump().items() if v is not None}
+            if bounds:
+                constraints[name] = bounds
+
+        return NutritionConstraints(
+            dietary_goals=self.dietary_goals,
+            foods_to_increase=self.foods_to_increase,
+            avoid=self.avoid,
+            limit=self.limit,
+            constraints=constraints,
+            notes=self.notes,
+        )
+
+
 class MedicalRAG(BaseRAG):
     """RAG system for extracting medical constraints from PDF documents."""
+
+    OUTPUT_SCHEMA = _ConstraintsSchema
 
     SYSTEM_PROMPT = """You are a medical nutrition specialist. Based on the medical documents provided, extract dietary constraints for the patient's condition(s).
 
@@ -182,12 +238,27 @@ RULES:
 
         logger.info("Retrieving constraints for: %s", conditions_str)
 
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, self.rag_chain.invoke, {"input": query},
-        )
-        answer = response.get("answer", "")
+        try:
+            response = await asyncio.to_thread(self.rag_chain.invoke, {"input": query})
+        except Exception:
+            # Do not return empty constraints here: downstream reads an empty
+            # avoid/limit list as "no restrictions", which is the opposite of
+            # "we could not determine the restrictions".
+            logger.exception("Medical RAG failed for conditions: %s", conditions_str)
+            raise RAGError(
+                f"Could not retrieve dietary constraints for {conditions_str}"
+            ) from None
 
+        answer = response.get("answer", "")
+        if isinstance(answer, _ConstraintsSchema):
+            return answer.to_domain()
+        if isinstance(answer, dict) and "dietary_goals" in answer:
+            return _ConstraintsSchema(**answer).to_domain()
+
+        logger.warning(
+            "Medical RAG returned %s instead of the bound schema — falling back "
+            "to JSON parsing", type(answer).__name__,
+        )
         return self._parse_constraints_response(answer)
 
     # ================================================================

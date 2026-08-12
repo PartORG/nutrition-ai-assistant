@@ -69,6 +69,11 @@ class Settings:
     rag_reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rag_fetch_k: int = 30        # candidate pool size before rerank
     rag_rerank_top_n: int = 8    # docs kept after rerank (medical RAG)
+    # Recipe docs passed to the LLM. Was 14, which put ~8-12k tokens of context
+    # in front of a small local model alongside a prompt full of shape rules.
+    # The shape rules now live in the bound schema, so the budget can shrink.
+    # Raise it back via RAG_RECIPE_K if recall suffers.
+    rag_recipe_k: int = 5
 
     # Connection details
     ollama_base_url: str = "http://localhost:11434/"
@@ -143,6 +148,7 @@ class Settings:
             rag_reranker_model=os.getenv("RAG_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
             rag_fetch_k=int(os.getenv("RAG_FETCH_K", "30")),
             rag_rerank_top_n=int(os.getenv("RAG_RERANK_TOP_N", "8")),
+            rag_recipe_k=int(os.getenv("RAG_RECIPE_K", "5")),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/"),
             groq_api_key=groq_key,
             openai_api_key=openai_key,

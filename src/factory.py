@@ -135,8 +135,7 @@ class ServiceFactory:
         # Shared embedding model — loaded ONCE here and injected into both RAGs
         # (a large model like BAAI/bge-m3 would otherwise be loaded twice).
         # Built in an executor to keep the heavy model load off the event loop.
-        loop = asyncio.get_event_loop()
-        embeddings = await loop.run_in_executor(None, self._build_embeddings)
+        embeddings = await asyncio.to_thread(self._build_embeddings)
         logger.info("Shared embeddings ready (%s)", cfg.embedding_model)
 
         # Initialize Medical RAG with configured provider
@@ -157,14 +156,13 @@ class ServiceFactory:
             fetch_k=cfg.rag_fetch_k,
             rerank_top_n=cfg.rag_rerank_top_n,
         )
-        await loop.run_in_executor(
-            None, self._medical_rag.initialize, False,
-        )
+        await asyncio.to_thread(self._medical_rag.initialize, False)
         logger.info("Medical RAG initialized (provider=%s)", cfg.llm_provider)
 
         # Initialize Recipe RAG with configured provider
         self._recipe_rag = RecipeNutritionRAG(
             data_folder=str(cfg.data_dir),
+            k=cfg.rag_recipe_k,
             model_name=cfg.active_llm_model,
             vectorstore_path=str(cfg.recipes_nutrition_vector_path),
             embedding_model=cfg.embedding_model,
@@ -176,9 +174,7 @@ class ServiceFactory:
             use_hybrid=cfg.rag_use_hybrid,
             reranker=reranker,
         )
-        await loop.run_in_executor(
-            None, self._recipe_rag.initialize,
-        )
+        await asyncio.to_thread(self._recipe_rag.initialize)
         logger.info("Recipe RAG initialized (provider=%s)", cfg.llm_provider)
 
         self._initialized = True

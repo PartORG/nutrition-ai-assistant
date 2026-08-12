@@ -1,11 +1,11 @@
 """
-infrastructure.rag.recipe_rag - Personalized recipe recommendations via dual vectorstores.
+infrastructure.rag.recipe_rag - Personalized recipe recommendations.
 
-Implements RecipeRAGPort. Migrated from rags/recipes_nutrition_rag.py with:
-    - SmartRetriever extracted to smart_retriever.py
-    - ask() has async wrapper
-    - No sys.path.insert
-    - Imports updated for new structure
+Implements RecipeRAGPort over the recipe corpus. Output shape is bound to
+_RecipeListSchema through the provider's structured-output API, so the model
+fills a schema rather than being asked in prose to emit particular JSON.
+
+Food composition lives in the nutrition_facts SQL table, not here.
 """
 
 from __future__ import annotations
@@ -22,12 +22,103 @@ import pandas as pd
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
 from langchain_core.documents import Document
+from pydantic import BaseModel, Field
 
 from infrastructure.config import DEFAULT_EMBEDDING_MODEL
 from infrastructure.rag.base_rag import BaseRAG
 from infrastructure.rag.smart_retriever import SmartRetriever
 
 logger = logging.getLogger(__name__)
+
+
+def _first_json_object(text: str) -> str | None:
+    """Return the first complete top-level {...} in `text`, or None.
+
+    Replaces `re.search(r'\\{.*\\}', ..., re.DOTALL)`, which took the first '{'
+    to the *last* '}' anywhere in the response. Given two JSON objects — a
+    chatty model offering alternatives — that spliced them into one malformed
+    blob and lost both. This tracks brace depth instead, ignoring braces inside
+    strings, and stops at the first balanced object.
+
+    Returns None for truncated output, since an unbalanced object is not
+    recoverable.
+    """
+    if not text:
+        return None
+
+    depth = 0
+    start = -1
+    in_string = False
+    escaped = False
+
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth:
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+
+    return None
+
+
+class _NutritionSchema(BaseModel):
+    """Per-serving nutrition the model must fill in."""
+
+    calories: float | None = Field(default=None, description="kcal per serving")
+    protein_g: float | None = Field(default=None, description="grams of protein")
+    carbs_g: float | None = Field(default=None, description="grams of carbohydrate")
+    fat_g: float | None = Field(default=None, description="grams of fat")
+    fiber_g: float | None = Field(default=None, description="grams of fibre")
+    sodium_mg: float | None = Field(default=None, description="milligrams of sodium")
+    sugar_g: float | None = Field(default=None, description="grams of sugar")
+    saturated_fat_g: float | None = Field(default=None, description="grams of saturated fat")
+
+
+class _RecipeSchema(BaseModel):
+    """One recipe. Field types here replace ~40 lines of defensive coercion.
+
+    `ingredients` used to arrive as dicts about as often as strings, and
+    `cook_instructions` as a list about as often as a string — both were patched
+    up by hand after the fact. Declaring the types makes the provider enforce
+    them.
+    """
+
+    name: str = Field(description="Recipe name")
+    why_recommended: str = Field(
+        default="", description="One sentence referencing a user requirement, max 150 chars"
+    )
+    servings: int = Field(default=1, description="Number of servings")
+    prep_time: str = Field(default="", description="With unit, e.g. '15 minutes'")
+    cook_time: str = Field(default="", description="With unit, e.g. '20 minutes'")
+    ingredients: list[str] = Field(
+        default_factory=list,
+        description="Flat list of strings, quantity first and metric: '200g chicken breast'",
+    )
+    cook_instructions: str = Field(
+        default="", description="Numbered steps in ONE string separated by newlines, °C"
+    )
+    nutrition: _NutritionSchema = Field(default_factory=_NutritionSchema)
+
+
+class _RecipeListSchema(BaseModel):
+    """The chain's output shape."""
+
+    recipes: list[_RecipeSchema] = Field(default_factory=list)
 
 
 class RecipeNutritionRAG(BaseRAG):
@@ -38,6 +129,9 @@ class RecipeNutritionRAG(BaseRAG):
     """
 
     LARGE_FILE_THRESHOLD_MB = 50
+
+    # Bind the output shape to the provider instead of asking for it in prose.
+    OUTPUT_SCHEMA = _RecipeListSchema
 
     SYSTEM_PROMPT = """You are a recipe recommendation engine in a nutrition assistant pipeline. Your task is to select and adapt recipes based on structured user requirements.
 
@@ -52,7 +146,7 @@ class RecipeNutritionRAG(BaseRAG):
 - Foods to Limit: Partial restrictions with limits
 - Instructions: Special requests (use fridge ingredients, specific foods wanted)
 
-{{context}} contains pre-filtered recipe and nutrition data from vector database (may be in metric or imperial units).
+{{context}} contains pre-filtered recipes retrieved from the recipe corpus (may be in metric or imperial units).
 
 ## PRIORITIZATION RULES (STRICT ORDER)
 
@@ -127,48 +221,41 @@ If context already uses metric, keep as-is.
 → Select recipes within limit per serving
 → If context recipe exceeds limit, reduce proportionally
 
-## OUTPUT FORMAT
+## WORKED EXAMPLE
 
-Return ONLY valid JSON — no markdown fences, no explanations, no extra text.
+The output shape is enforced automatically — do not describe it, just fill it in.
+Concentrate on *choosing and adapting* the right recipes. One example of the
+level of detail expected:
 
-**CRITICAL OUTPUT RULES:**
-1. Root object MUST have single key "recipes" with array value
-2. ONLY use these field names: name, why_recommended, servings, prep_time, cook_time, ingredients, cook_instructions, nutrition
-3. FORBIDDEN fields: "Meal", "Diet Type", "Preparation", "Key Vitamins", "Key Minerals", "Macronutrients"
-4. Ingredients MUST be a flat string array — NOT nested objects
-5. All metric, all complete, no null values
+Given — User Query: "quick high-protein dinner"; Restrictions: vegetarian;
+Foods to Avoid: peanuts; Nutrition Guidelines: 500 kcal max per serving.
 
-**JSON Structure:**
-{{
-  "recipes": [
-    {{
-      "name": "Adapted recipe name (not original if modified)",
-      "why_recommended": "One sentence referencing user requirements (max 150 chars)",
-      "servings": 2,
-      "prep_time": "15 minutes",
-      "cook_time": "20 minutes",
-      "ingredients": ["200g chicken breast", "150ml olive oil", "2 cloves garlic"],
-      "cook_instructions": "1. Preheat oven to 180°C.\\n2. Season chicken.\\n3. Bake 25 min.",
-      "nutrition": {{
-        "calories": 350,
-        "protein_g": 25.0,
-        "carbs_g": 30.0,
-        "fat_g": 12.0,
-        "fiber_g": 5.0,
-        "sodium_mg": 400,
-        "sugar_g": 3.0,
-        "saturated_fat_g": 2.0
-      }}
-    }}
-  ]
-}}
+A good response contains one recipe like:
+  name: "Paneer & Chickpea Skillet"
+  why_recommended: "Vegetarian, 38g protein, ready in 20 minutes, under your
+                    500 kcal target."
+  servings: 2
+  prep_time: "10 minutes"
+  cook_time: "15 minutes"
+  ingredients: ["200g paneer, cubed", "240g cooked chickpeas", "15ml olive oil",
+                "2 cloves garlic, minced", "5g garam masala", "200g spinach"]
+  cook_instructions: "1. Heat oil over medium heat.\\n2. Brown the paneer, 5 min.
+                      \\n3. Add garlic and garam masala, 1 min.\\n4. Stir in
+                      chickpeas and spinach, 4 min."
+  nutrition: calories 470, protein_g 38, carbs_g 32, fat_g 21, fiber_g 9,
+             sodium_mg 380, sugar_g 4, saturated_fat_g 9
 
-**Field Format Rules:**
-- `ingredients`: Start with quantity: "200g chicken" (not "chicken 200g"). Metric only.
-- `cook_instructions`: Single string, numbered steps separated by \\n. Temperatures in °C.
-- `prep_time` / `cook_time`: Always include unit: "15 minutes" (not "15").
-- `why_recommended`: Reference at least one user requirement. Max 150 characters.
-- `nutrition`: All 8 fields required. Estimate if unknown.
+Note what it does: swaps the meat silently rather than announcing it, names the
+requirement it satisfies, keeps every measurement metric, and estimates the
+nutrition rather than leaving it blank.
+
+## REMAINING RULES
+
+- Ingredients start with the quantity: "200g chicken", not "chicken 200g".
+- Temperatures in °C, numbered cooking steps.
+- Include the unit in times: "15 minutes", not "15".
+- Estimate nutrition from the ingredients when the context does not give it —
+  never leave a value out.
 
 ---
 
@@ -178,7 +265,8 @@ User Input:
 Retrieved Context:
 {context}
 
-Generate JSON with the exact number of recipes requested (default 3), adapting recipes silently to meet all requirements from highest to lowest priority. Convert all measurements to metric. Return ONLY the JSON object."""
+Return the number of recipes requested (default 3), adapting them silently to
+meet the requirements from highest to lowest priority, all measurements metric."""
 
     def __init__(
         self,
@@ -186,7 +274,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         vectorstore_path: str,
         model_name: str = "llama3.2",
         temperature: float = 0.3,
-        k: int = 14,
+        k: int = 5,
         ollama_base_url: str = "http://localhost:11434/",
         llm_provider: str = "ollama",
         openai_api_key: str | None = None,
@@ -228,29 +316,68 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
     async def async_ask(self, query: str) -> list:
         """Query the RAG and return structured Recipe objects.
 
-        The LLM is forced to output JSON (llm_format='json').
-        We parse that JSON directly into Recipe domain objects —
-        no second LLM re-parsing step needed.
+        The chain binds _RecipeListSchema through the provider's structured
+        output API, so the shape is enforced rather than requested. The
+        string-parsing path below is a fallback for providers that ignore the
+        binding and return prose anyway.
         """
-        loop = asyncio.get_event_loop()
-        raw_json = await loop.run_in_executor(None, super().ask, query)
-        return self._parse_json_to_recipes(raw_json)
+        if not self.rag_chain:
+            logger.error("RAG chain not initialized — call initialize() first")
+            return []
+
+        try:
+            response = await asyncio.to_thread(self.rag_chain.invoke, {"input": query})
+        except Exception:
+            logger.exception("Recipe RAG chain failed")
+            return []
+
+        answer = response.get("answer")
+        if isinstance(answer, _RecipeListSchema):
+            return self._schema_to_recipes(answer)
+        if isinstance(answer, dict):
+            # Some providers return the validated dict rather than the model.
+            return self._schema_to_recipes(_RecipeListSchema(**answer))
+
+        logger.warning(
+            "Recipe RAG returned %s instead of the bound schema — falling back to "
+            "JSON parsing", type(answer).__name__,
+        )
+        return self._parse_json_to_recipes(answer if isinstance(answer, str) else "")
+
+    @staticmethod
+    def _schema_to_recipes(parsed: _RecipeListSchema) -> list:
+        """Map the validated schema onto domain Recipe objects.
+
+        No coercion needed: the types were enforced upstream.
+        """
+        from domain.models import NutritionValues, Recipe
+
+        return [
+            Recipe(
+                name=r.name.strip(),
+                ingredients=list(r.ingredients),
+                nutrition=NutritionValues(**r.nutrition.model_dump()),
+                why_recommended=r.why_recommended,
+                servings=r.servings or 1,
+                prep_time=r.prep_time,
+                cook_instructions=r.cook_instructions,
+            )
+            for r in parsed.recipes
+        ]
 
     @staticmethod
     def _parse_json_to_recipes(raw_json: str) -> list:
         """Parse the LLM JSON output into a list of Recipe domain objects."""
-        import re
 
         from domain.models import NutritionValues, Recipe
 
-        # Extract JSON object (guard against any stray text)
-        match = re.search(r'\{.*\}', raw_json, re.DOTALL)
-        if not match:
+        blob = _first_json_object(raw_json)
+        if blob is None:
             logger.warning("Recipe RAG returned no JSON object: %s", raw_json[:200])
             return []
 
         try:
-            data = json.loads(match.group())
+            data = json.loads(blob)
         except json.JSONDecodeError as e:
             logger.warning("Recipe RAG JSON parse error: %s", e)
             return []
@@ -437,6 +564,9 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             reranker=self.reranker,
         )
         self.retriever = self.smart_retriever
+        # Pay the BM25 tokenisation cost here, during startup, rather than
+        # inside whichever request happens to arrive first after a restart.
+        self.smart_retriever.warm_up()
         logger.info(
             "SmartRetriever created (k=%d, hybrid=%s, rerank=%s)",
             self.k, self.use_hybrid, self.reranker is not None,

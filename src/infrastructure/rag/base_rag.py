@@ -22,6 +22,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 from langchain_huggingface import HuggingFaceEmbeddings
+from pydantic import BaseModel
 
 from domain.exceptions import RAGError
 from infrastructure.config import DEFAULT_EMBEDDING_MODEL
@@ -53,6 +54,10 @@ class BaseRAG(ABC):
     """
 
     SYSTEM_PROMPT: str = ""
+
+    # Optional Pydantic schema. When set, the chain returns a populated model
+    # instead of a string, via the provider's structured-output API.
+    OUTPUT_SCHEMA: type[BaseModel] | None = None
 
     def __init__(
         self,
@@ -159,6 +164,11 @@ class BaseRAG(ABC):
         Returns:
             LLM instance for the selected provider.
         """
+        # A bound OUTPUT_SCHEMA needs ChatOllama: with_structured_output is
+        # not implemented on OllamaLLM, so without this the schema would be
+        # silently dropped and every response parsed as a string. The schema
+        # also supersedes format="json" — both set the same Ollama parameter.
+        structured = self.OUTPUT_SCHEMA is not None
         return _build_llm_central(
             provider=self.llm_provider,
             model=self.model_name,
@@ -166,7 +176,8 @@ class BaseRAG(ABC):
             ollama_base_url=self.ollama_base_url,
             openai_api_key=self.openai_api_key or "",
             groq_api_key=self.groq_api_key or "",
-            json_mode=bool(self.llm_format),
+            json_mode=bool(self.llm_format) and not structured,
+            chat_model=structured,
         )
 
     def ask(self, query: str) -> str:
@@ -446,14 +457,32 @@ class BaseRAG(ABC):
         # input dict -> retrieved documents (retrievers expect the query string)
         retrieve_docs: Runnable = RunnableLambda(lambda x: x["input"]) | self.retriever
 
-        # {input, context: [Document]} -> answer string
+        # {input, context: [Document]} -> answer.
+        #
+        # When a subclass declares OUTPUT_SCHEMA, bind it through the provider's
+        # native structured-output API instead of parsing a free-form string.
+        # format="json" only guarantees syntax; a schema guarantees shape, which
+        # is what small local models actually get wrong.
+        generate: Runnable = self.llm | StrOutputParser()
+        if self.OUTPUT_SCHEMA is not None:
+            try:
+                generate = self.llm.with_structured_output(self.OUTPUT_SCHEMA)
+            except (NotImplementedError, AttributeError) as e:
+                # A provider without structured-output support must not take the
+                # whole app down at startup. Subclasses keep a string-parsing
+                # fallback for exactly this case.
+                logger.warning(
+                    "%s does not support structured output (%s) — falling back to "
+                    "string parsing for %s",
+                    type(self.llm).__name__, e, self.__class__.__name__,
+                )
+
         answer = (
             RunnableLambda(
                 lambda x: {"input": x["input"], "context": self._format_docs(x["context"])}
             )
             | prompt
-            | self.llm
-            | StrOutputParser()
+            | generate
         )
 
         self.rag_chain = RunnablePassthrough.assign(

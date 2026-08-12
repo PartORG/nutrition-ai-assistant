@@ -60,11 +60,8 @@ class LLaVAIngredientDetector:
         if not path.exists():
             raise IngredientDetectionError(f"Image file not found: {image_path}")
 
-        loop = asyncio.get_event_loop()
         try:
-            ingredients = await loop.run_in_executor(
-                None, self._run_llava, str(path)
-            )
+            ingredients = await asyncio.to_thread(self._run_llava, str(path))
         except IngredientDetectionError:
             raise
         except Exception as e:

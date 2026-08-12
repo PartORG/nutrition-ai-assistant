@@ -102,22 +102,33 @@ def test_malformed_json_returns_empty():
     assert parse('{"recipes": [ {"name": "Broken" ') == []
 
 
-def test_truncated_output_is_indistinguishable_from_no_recipes():
-    """KNOWN-BAD: a cut-off response silently becomes 'No recipes found'.
+def test_truncated_output_yields_no_recipes():
+    """A cut-off response is unrecoverable, so it parses to nothing.
 
-    A model hitting its token limit mid-object produces unparseable JSON, and
-    the caller cannot tell that apart from a legitimately empty result. Phase 4
-    should surface this as an error instead. Flip this assertion then.
+    Was marked KNOWN-BAD in Phase 1 because the caller cannot distinguish this
+    from a legitimately empty result. It stays [] — an unbalanced object cannot
+    be repaired — but this path is now only a fallback: the chain binds
+    _RecipeListSchema, so the provider enforces the shape and a truncated
+    response fails validation upstream instead.
     """
     truncated = _payload()[: len(_payload()) // 2]
     assert parse(truncated) == []
 
 
-def test_greedy_regex_spans_two_json_objects():
-    """KNOWN-BAD: the extractor takes first '{' to last '}'.
+def test_two_json_objects_parse_the_first_not_a_splice():
+    """FIXED in Phase 4 (was KNOWN-BAD).
 
-    Given two separate objects it splices them into one malformed blob rather
-    than parsing the first, so a chatty model loses everything.
+    The old extractor took the first '{' to the *last* '}', splicing two
+    objects into one malformed blob and losing both. Brace-depth scanning
+    returns the first complete object instead.
     """
     two_objects = f"{_payload()}\nAnd another:\n{_payload()}"
-    assert parse(two_objects) == []
+    [recipe] = parse(two_objects)
+    assert recipe.name == "Lemon Chicken"
+
+
+def test_braces_inside_strings_do_not_end_the_object():
+    """A '}' inside a string value must not terminate extraction early."""
+    payload = _payload(why_recommended="Uses a {special} technique")
+    [recipe] = parse(payload)
+    assert recipe.why_recommended == "Uses a {special} technique"

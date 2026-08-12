@@ -17,8 +17,8 @@ import json
 import logging
 import re
 
-from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
 
 from domain.exceptions import SafetyCheckError
 from domain.models import (
@@ -34,6 +34,22 @@ from domain.models import (
 from infrastructure.llm.llm_builder import build_llm
 
 logger = logging.getLogger(__name__)
+
+_VALID_SEVERITIES = {"critical", "high", "medium"}
+
+
+def _normalize_severity(value: str) -> str:
+    """Map a model's severity onto the three the verdict logic understands.
+
+    Defaulting an unrecognised value to "medium" downgrades it to a warning.
+    Anything unfamiliar is treated as "high" instead, so an unexpected label
+    cannot quietly turn a rejection into a pass.
+    """
+    severity = (value or "").strip().lower()
+    if severity in _VALID_SEVERITIES:
+        return severity
+    logger.warning("Unrecognised severity %r from model — treating as high", value)
+    return "high"
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +86,38 @@ RESTRICTION_INGREDIENT_MAP: dict[str, list[str]] = {
 
 
 
+class _IssueSchema(BaseModel):
+    """One hidden-ingredient finding."""
+
+    category: str = Field(
+        default="hidden_ingredient",
+        description="'hidden_ingredient' or 'restriction_violation'",
+    )
+    severity: str = Field(
+        default="medium", description="'critical', 'high' or 'medium'"
+    )
+    description: str = Field(
+        default="", description="Short explanation naming the restriction breached"
+    )
+    detail: str = Field(default="")
+
+
+class _RecipeCheckSchema(BaseModel):
+    recipe_name: str = Field(default="")
+    issues: list[_IssueSchema] = Field(default_factory=list)
+
+
+class _SafetyCheckSchema(BaseModel):
+    """The semantic check's output shape.
+
+    Previously a JsonOutputParser feeding a chain of .get() defaults, where an
+    unrecognised severity silently became "medium" — downgrading a critical
+    allergen finding to a warning.
+    """
+
+    recipe_checks: list[_RecipeCheckSchema] = Field(default_factory=list)
+
+
 class SafetyFilter:
     """Implements SafetyFilterPort using any supported LLM provider + rule-based checks."""
 
@@ -84,16 +132,20 @@ class SafetyFilter:
         debug: bool = False,
     ):
         self._debug = debug
+        # chat_model=True is required: with_structured_output is only
+        # implemented on ChatOllama, not OllamaLLM. json_mode is off because the
+        # bound schema supersedes format="json" — setting both fights over the
+        # same Ollama parameter.
         self._llm = build_llm(
             provider=provider,
             model=model,
             temperature=0,
-            json_mode=True,
+            json_mode=False,
+            chat_model=True,
             ollama_base_url=ollama_base_url,
             openai_api_key=openai_api_key,
             groq_api_key=groq_api_key,
         )
-        self._parser = JsonOutputParser()
         self._check_chain = self._build_check_chain()
 
     # ------------------------------------------------------------------
@@ -255,7 +307,7 @@ Return ONLY valid JSON."""
             ("system", system),
             ("user", "PARSED RECIPES:\n{recipes_json}\n\nPATIENT CONSTRAINTS:\n- Restrictions/allergies: {restrictions}\n- Foods to AVOID: {avoid_foods}\n- Foods to LIMIT: {limit_foods}\n- Health conditions: {health_conditions}\n- Meal instructions: {instructions}\n- Nutrition limits: {nutrition_constraints}"),
         ])
-        return prompt | self._llm | self._parser
+        return prompt | self._llm.with_structured_output(_SafetyCheckSchema)
 
     # ------------------------------------------------------------------
     # Internal methods
@@ -409,19 +461,24 @@ Return ONLY valid JSON."""
                 "nutrition_constraints": nutrition_str,
             })
 
+            parsed = (
+                result if isinstance(result, _SafetyCheckSchema)
+                else _SafetyCheckSchema(**result)
+            )
+
             issues_map: dict[str, list[SafetyIssue]] = {}
-            for check in result.get("recipe_checks", []):
-                name = check.get("recipe_name", "")
-                issues: list[SafetyIssue] = []
-                for iss in check.get("issues", []):
-                    issues.append(SafetyIssue(
-                        category=iss.get("category", "unknown"),
-                        severity=iss.get("severity", "medium"),
-                        description=iss.get("description", ""),
-                        detail=iss.get("detail", ""),
-                    ))
+            for check in parsed.recipe_checks:
+                issues = [
+                    SafetyIssue(
+                        category=iss.category,
+                        severity=_normalize_severity(iss.severity),
+                        description=iss.description,
+                        detail=iss.detail,
+                    )
+                    for iss in check.issues
+                ]
                 if issues:
-                    issues_map[name] = issues
+                    issues_map[check.recipe_name] = issues
             return issues_map
         except Exception as e:
             # Never swallow this. An empty map is indistinguishable from

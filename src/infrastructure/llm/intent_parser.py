@@ -8,7 +8,7 @@ centralized LLM_PROVIDER setting.
 Migrated from components/intent_retriever.py with these changes:
     - UserIntent dataclass moved to domain/models.py
     - Fields now use list[str] instead of comma-separated strings
-    - parse() is async (wraps sync chain in run_in_executor)
+    - parse() is async (wraps the sync chain in asyncio.to_thread)
     - Supports openai, groq, and ollama providers
 """
 
@@ -252,10 +252,7 @@ class IntentParser:
         Runs the sync LangChain chain in a thread pool to avoid blocking.
         """
         try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, self._chain.invoke, {"query": query},
-            )
+            result = await asyncio.to_thread(self._chain.invoke, {"query": query})
             # with_structured_output returns the pydantic model (or, on some
             # providers, a dict) — normalise to a dict either way.
             data = result if isinstance(result, dict) else result.model_dump()

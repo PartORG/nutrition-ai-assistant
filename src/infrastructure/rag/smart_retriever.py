@@ -54,6 +54,15 @@ class SmartRetriever(Runnable):
         self._bm25 = None
         self._bm25_built = False
 
+    def warm_up(self) -> None:
+        """Build the BM25 index now rather than inside the first user request.
+
+        Tokenising the corpus takes seconds; doing it lazily put that entirely
+        on whoever asked the first question after a restart.
+        """
+        if self.use_hybrid:
+            self._bm25_index()
+
     def invoke(
         self, input: dict | str, config: RunnableConfig = None,  # noqa: A002
     ) -> list[Document]:
