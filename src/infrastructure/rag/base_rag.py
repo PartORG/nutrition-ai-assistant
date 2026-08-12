@@ -9,6 +9,7 @@ abstraction in the original codebase. Changes:
 
 import json
 import logging
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Dict, Any, Optional, Set
@@ -22,6 +23,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 
+from domain.exceptions import RAGError
 from infrastructure.llm.llm_builder import build_llm as _build_llm_central
 
 if TYPE_CHECKING:
@@ -123,6 +125,7 @@ class BaseRAG(ABC):
         if needs_build:
             reason = "force_rebuild=True" if force_rebuild else "rebuild/no existing index"
             logger.info("Building vectorstore (%s)", reason)
+            self._require_writable_vectorstore_path()
             self._prepare_rebuild()
             docs = self._ingest_documents()
             if not docs:
@@ -216,6 +219,24 @@ class BaseRAG(ABC):
 
     def _vectorstore_exists(self) -> bool:
         return self.vectorstore_path.exists()
+
+    def _require_writable_vectorstore_path(self) -> None:
+        """Fail fast, and legibly, when an index rebuild cannot be written.
+
+        docker-compose mounts vector_databases read-only. Without this guard a
+        missing or stale index makes startup re-ingest the whole corpus and then
+        die inside save_local with a bare OSError, minutes later.
+        """
+        path = self.vectorstore_path
+        probe = path if path.exists() else path.parent
+        if os.access(probe, os.W_OK):
+            return
+        raise RAGError(
+            f"{self.__class__.__name__} needs to build its vector index at '{path}', "
+            f"but that path is read-only. Either build the index in a writable "
+            f"environment and ship it, or mount the directory read-write "
+            f"(docker-compose.yml mounts ./vector_databases with ':ro')."
+        )
 
     def _index_dim_ok(self, vectorstore) -> bool:
         """True if `vectorstore` accepts a query from the current embeddings.

@@ -109,8 +109,6 @@ class SafetyFilter:
         intent: UserIntent,
     ) -> SafetyCheckResult:
         """Main entry: check pre-parsed recipes, return results."""
-        loop = asyncio.get_event_loop()
-
         if not recipes:
             return SafetyCheckResult(
                 safe_recipes_markdown="",
@@ -133,10 +131,24 @@ class SafetyFilter:
             issues.extend(self._check_nutrition(recipe.nutrition, constraint_rules, servings=recipe.servings))
             rule_issues_per_recipe.append(issues)
 
-        # Step 3: LLM semantic check
-        llm_issues_map = await loop.run_in_executor(
-            None, self._llm_semantic_check, recipes, constraints, intent,
+        # Step 3: LLM semantic check.
+        # If it fails we must not claim a recipe is SAFE — the rule-based pass
+        # only matches literal ingredient names, so the semantic layer is the
+        # only thing catching "prosciutto is pork". Degrade to WARNING instead.
+        has_something_to_catch = bool(
+            avoid_foods or constraint_rules or restrictions
+            or constraints.limit or intent.health_conditions
         )
+        semantic_check_failed = False
+        try:
+            llm_issues_map = await asyncio.to_thread(
+                self._llm_semantic_check, recipes, constraints, intent,
+            )
+        except SafetyCheckError:
+            llm_issues_map = {}
+            # Nothing to catch means nothing was missed — only degrade when
+            # the user actually has restrictions or conditions in play.
+            semantic_check_failed = has_something_to_catch
 
         # Step 4: Merge and determine verdicts
         recipe_verdicts: list[RecipeSafetyResult] = []
@@ -148,6 +160,10 @@ class SafetyFilter:
             if any(iss.severity in ("critical", "high") for iss in all_issues):
                 verdict = SafetyVerdict.UNSAFE
             elif any(iss.severity == "medium" for iss in all_issues):
+                verdict = SafetyVerdict.WARNING
+            elif semantic_check_failed:
+                # Rule-based checks passed, but the semantic layer never ran.
+                # "Not proven unsafe" is not the same as "safe".
                 verdict = SafetyVerdict.WARNING
             else:
                 verdict = SafetyVerdict.SAFE
@@ -174,6 +190,11 @@ class SafetyFilter:
         safe_count = len(safe_recipes)
         total_count = len(recipes)
         summary_parts = [f"{safe_count}/{total_count} recipes passed safety check."]
+        if semantic_check_failed:
+            summary_parts.append(
+                "  INCOMPLETE: the hidden-ingredient check could not run, so these "
+                "recipes were not fully verified against your restrictions."
+            )
         for rv in recipe_verdicts:
             if rv.verdict == SafetyVerdict.UNSAFE:
                 reasons = "; ".join(iss.description for iss in rv.issues[:3])
@@ -405,9 +426,10 @@ Return ONLY valid JSON."""
                     issues_map[name] = issues
             return issues_map
         except Exception as e:
-            if self._debug:
-                logger.debug("LLM semantic check error: %s", e)
-            return {}
+            # Never swallow this. An empty map is indistinguishable from
+            # "no problems found", which would silently pass unsafe recipes.
+            logger.error("LLM semantic safety check failed: %s", e)
+            raise SafetyCheckError("LLM semantic safety check failed") from e
 
     @staticmethod
     def _recipes_to_markdown(recipes: list[Recipe]) -> str:
