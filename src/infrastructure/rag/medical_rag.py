@@ -25,6 +25,7 @@ from domain.exceptions import RAGError
 from domain.models import NutritionConstraints
 from infrastructure.config import DEFAULT_EMBEDDING_MODEL
 from infrastructure.rag.base_rag import BaseRAG
+from infrastructure.rag.prompts import MEDICAL_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -86,35 +87,7 @@ class MedicalRAG(BaseRAG):
 
     OUTPUT_SCHEMA = _ConstraintsSchema
 
-    SYSTEM_PROMPT = """You are a medical nutrition specialist. Based on the medical documents provided, extract dietary constraints for the patient's condition(s).
-
-CONTEXT:
-{context}
-
-USER QUERY: {input}
-
-You MUST respond with a valid JSON object using EXACTLY this structure:
-{{
-  "dietary_goals": "brief summary of dietary goals",
-  "foods_to_increase": ["food1", "food2"],
-  "avoid": ["foods the patient must completely avoid"],
-  "limit": ["foods the patient should reduce or eat in moderation"],
-  "constraints": {{
-    "sugar_g": {{"max": <number or null>}},
-    "sodium_mg": {{"max": <number or null>}},
-    "fiber_g": {{"min": <number or null>}},
-    "protein_g": {{"max": <number or null>}},
-    "saturated_fat_g": {{"max": <number or null>}}
-  }},
-  "notes": "any additional important dietary notes"
-}}
-
-RULES:
-- Use numeric daily limits in grams/milligrams where the documents provide them.
-- If the documents do not specify an exact number, estimate a reasonable daily limit based on standard medical guidelines.
-- "avoid" = foods that must be completely excluded.
-- "limit" = foods that should be reduced but are okay in moderation.
-- Always return valid JSON, nothing else."""
+    SYSTEM_PROMPT = MEDICAL_SYSTEM_PROMPT
 
     def __init__(
         self,

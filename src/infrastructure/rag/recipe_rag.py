@@ -10,13 +10,10 @@ Food composition lives in the nutrition_facts SQL table, not here.
 
 from __future__ import annotations
 
-import ast
 import asyncio
 import json
 import logging
-import re
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 from langchain_community.vectorstores import FAISS
@@ -26,6 +23,14 @@ from pydantic import BaseModel, Field
 
 from infrastructure.config import DEFAULT_EMBEDDING_MODEL
 from infrastructure.rag.base_rag import BaseRAG
+from infrastructure.rag.prompts import RECIPE_SYSTEM_PROMPT
+from infrastructure.rag.recipe_ingest import (
+    get_batch_meta,
+    load_healthy_meals_csv,
+    load_recipes_csv,
+    load_recipes_data_sample_csv,
+    save_batch_meta,
+)
 from infrastructure.rag.smart_retriever import SmartRetriever
 
 logger = logging.getLogger(__name__)
@@ -133,140 +138,7 @@ class RecipeNutritionRAG(BaseRAG):
     # Bind the output shape to the provider instead of asking for it in prose.
     OUTPUT_SCHEMA = _RecipeListSchema
 
-    SYSTEM_PROMPT = """You are a recipe recommendation engine in a nutrition assistant pipeline. Your task is to select and adapt recipes based on structured user requirements.
-
-## INPUT FORMAT YOU RECEIVE
-
-{{input}} will contain:
-- User Query: Original user request
-- Dietary Restrictions: Hard constraints (vegetarian, gluten-free, etc.)
-- Preferences: Soft preferences (cuisine type, meal speed, etc.)
-- Nutrition Guidelines: Calorie and macronutrient targets
-- Foods to Avoid: Complete exclusions (allergies, medical)
-- Foods to Limit: Partial restrictions with limits
-- Instructions: Special requests (use fridge ingredients, specific foods wanted)
-
-{{context}} contains pre-filtered recipes retrieved from the recipe corpus (may be in metric or imperial units).
-
-## PRIORITIZATION RULES (STRICT ORDER)
-
-When requirements conflict, follow this hierarchy:
-1. **CRITICAL**: Foods to Avoid (allergies, medical contraindications) — NEVER include these
-2. **HIGH**: Dietary Restrictions (vegetarian, vegan, gluten-free, etc.)
-3. **MEDIUM**: Nutrition Guidelines (calorie limits, macronutrient targets)
-4. **LOW**: Preferences (cuisine, cooking time, taste)
-
-If no recipe in {{context}} meets all critical requirements, silently adapt the closest matches.
-
-## RECIPE QUANTITY
-
-- **DEFAULT**: Always provide 3 recipes (unless specified in Instructions)
-- If Instructions say "I want ONE recipe" → Provide 1
-- If Instructions say "give me 5 options" → Provide 5
-- For ambiguous requests → Provide 3
-
-## RECIPE ADAPTATION PROTOCOL
-
-**When to Adapt:**
-- Recipe contains Foods to Avoid → Replace with safe alternatives
-- Recipe exceeds Nutrition Guidelines → Adjust portions or substitute ingredients
-- Recipe violates Dietary Restrictions → Substitute non-compliant ingredients
-- User requests specific ingredients in Instructions → Incorporate them if possible
-
-**Adaptation Rules:**
-- Make adaptations SILENTLY (do not mention original recipe or changes)
-- Maintain recipe authenticity (don't change cuisine character drastically)
-- Preserve cooking method when possible (oven → oven, not oven → microwave)
-- Calculate new nutritional values after adaptations
-
-**Example:**
-- User: vegetarian, Recipe: chicken pasta
-- **Adapt:** Replace chicken with chickpeas or tofu (same protein content)
-- **Output:** Present as "Chickpea Pasta" (not "Adapted Chicken Pasta")
-
-## MEASUREMENT CONVERSIONS (MANDATORY)
-
-Convert ALL imperial measurements to metric in the output:
-- Cups → ml/g (1 cup ≈ 240 ml liquid, 240 g solid)
-- tbsp → ml (1 tbsp = 15 ml), tsp → ml (1 tsp = 5 ml)
-- oz → g (1 oz ≈ 28 g), lb → g (1 lb ≈ 454 g)
-- °F → °C (350°F→175°C, 375°F→190°C, 400°F→200°C, 425°F→220°C)
-
-If context already uses metric, keep as-is.
-
-## HANDLING MISSING DATA
-
-**Missing Ingredient Quantities:**
-- Estimate from context nutritional info and serving size
-- Seasonings: use standard amounts (salt: 5g, pepper: 2g, herbs: 10g)
-
-**Missing Cooking Instructions:**
-- Create logical steps based on ingredient types and cooking method
-- Include temperatures in Celsius, number each step clearly
-
-**Missing Nutritional Values:**
-- Calculate from individual ingredients using standard USDA values
-- Never leave nutrition fields empty
-
-## SPECIAL CASES
-
-**"use ingredients from fridge/home [list]"**
-→ PRIORITIZE recipes using those listed ingredients
-→ If no exact match, incorporate ingredients into closest recipe
-
-**"I want [specific food]"**
-→ MUST include that food in at least one recipe
-
-**Foods to Limit with amounts (e.g. "sugar max 10g")**
-→ Select recipes within limit per serving
-→ If context recipe exceeds limit, reduce proportionally
-
-## WORKED EXAMPLE
-
-The output shape is enforced automatically — do not describe it, just fill it in.
-Concentrate on *choosing and adapting* the right recipes. One example of the
-level of detail expected:
-
-Given — User Query: "quick high-protein dinner"; Restrictions: vegetarian;
-Foods to Avoid: peanuts; Nutrition Guidelines: 500 kcal max per serving.
-
-A good response contains one recipe like:
-  name: "Paneer & Chickpea Skillet"
-  why_recommended: "Vegetarian, 38g protein, ready in 20 minutes, under your
-                    500 kcal target."
-  servings: 2
-  prep_time: "10 minutes"
-  cook_time: "15 minutes"
-  ingredients: ["200g paneer, cubed", "240g cooked chickpeas", "15ml olive oil",
-                "2 cloves garlic, minced", "5g garam masala", "200g spinach"]
-  cook_instructions: "1. Heat oil over medium heat.\\n2. Brown the paneer, 5 min.
-                      \\n3. Add garlic and garam masala, 1 min.\\n4. Stir in
-                      chickpeas and spinach, 4 min."
-  nutrition: calories 470, protein_g 38, carbs_g 32, fat_g 21, fiber_g 9,
-             sodium_mg 380, sugar_g 4, saturated_fat_g 9
-
-Note what it does: swaps the meat silently rather than announcing it, names the
-requirement it satisfies, keeps every measurement metric, and estimates the
-nutrition rather than leaving it blank.
-
-## REMAINING RULES
-
-- Ingredients start with the quantity: "200g chicken", not "chicken 200g".
-- Temperatures in °C, numbered cooking steps.
-- Include the unit in times: "15 minutes", not "15".
-- Estimate nutrition from the ingredients when the context does not give it —
-  never leave a value out.
-
----
-
-User Input:
-{input}
-
-Retrieved Context:
-{context}
-
-Return the number of recipes requested (default 3), adapting them silently to
-meet the requirements from highest to lowest priority, all measurements metric."""
+    SYSTEM_PROMPT = RECIPE_SYSTEM_PROMPT
 
     def __init__(
         self,
@@ -440,9 +312,9 @@ meet the requirements from highest to lowest priority, all measurements metric."
 
     def _ingest_documents(self) -> list[Document]:
         csv_sources = [
-            ("cleaned_recipes.csv", self._load_recipes_csv, "recipes"),
-            ("cleaned_recipes_data_sample.csv", self._load_recipes_data_sample_csv, "recipes"),
-            ("cleaned_healthy_meals.csv", self._load_healthy_meals_csv, "recipes"),
+            ("cleaned_recipes.csv", load_recipes_csv, "recipes"),
+            ("cleaned_recipes_data_sample.csv", load_recipes_data_sample_csv, "recipes"),
+            ("cleaned_healthy_meals.csv", load_healthy_meals_csv, "recipes"),
         ]
 
         threshold_bytes = self.LARGE_FILE_THRESHOLD_MB * 1024 * 1024
@@ -486,9 +358,9 @@ meet the requirements from highest to lowest priority, all measurements metric."
             return []
 
         loader_map = {
-            "cleaned_recipes.csv": self._load_recipes_csv,
-            "cleaned_recipes_data_sample.csv": self._load_recipes_data_sample_csv,
-            "cleaned_healthy_meals.csv": self._load_healthy_meals_csv,
+            "cleaned_recipes.csv": load_recipes_csv,
+            "cleaned_recipes_data_sample.csv": load_recipes_data_sample_csv,
+            "cleaned_healthy_meals.csv": load_healthy_meals_csv,
         }
         loader_fn = loader_map.get(path.name)
         if loader_fn is None:
@@ -595,7 +467,7 @@ meet the requirements from highest to lowest priority, all measurements metric."
             raise ValueError(f"Unknown collection: {collection}")
         target = self.vectorstore_recipes
 
-        meta = self._get_batch_meta(csv_path)
+        meta = get_batch_meta(self.vectorstore_path, csv_path)
         start_offset = meta.get("rows_indexed", 0)
 
         total_rows = meta.get("total_rows")
@@ -639,7 +511,7 @@ meet the requirements from highest to lowest priority, all measurements metric."
             batch_num += 1
 
             meta["rows_indexed"] = rows_processed
-            self._save_batch_meta(csv_path, meta)
+            save_batch_meta(self.vectorstore_path, csv_path, meta)
 
             logger.info(
                 "Batch %d/%d — %d/%d rows indexed",
@@ -648,233 +520,16 @@ meet the requirements from highest to lowest priority, all measurements metric."
 
         logger.info("Batched ingestion complete: %s (%d rows)", path.name, rows_processed)
 
-    def _batch_meta_path(self, csv_path: str) -> Path:
-        name = Path(csv_path).stem
-        return self.vectorstore_path / f"{name}_batch_meta.json"
-
-    def _get_batch_meta(self, csv_path: str) -> dict[str, Any]:
-        meta_path = self._batch_meta_path(csv_path)
-        if not meta_path.exists():
-            return {}
-        with open(meta_path, encoding="utf-8") as f:
-            return json.load(f)
-
-    def _save_batch_meta(self, csv_path: str, meta: dict[str, Any]) -> None:
-        meta_path = self._batch_meta_path(csv_path)
-        meta_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, indent=2)
-
     # ================================================================
     # CSV data loaders
     # ================================================================
-
-    @staticmethod
-    def _detect_allergens(text: str) -> list[str]:
-        text_lower = text.lower()
-        allergens = []
-        if any(w in text_lower for w in ["milk", "cheese", "butter", "cream", "yogurt"]):
-            allergens.append("dairy")
-        if "egg" in text_lower:
-            allergens.append("eggs")
-        if any(w in text_lower for w in ["wheat", "flour", "bread"]):
-            allergens.append("gluten")
-        if any(w in text_lower for w in ["nuts", "almond", "peanut", "walnut", "pecan"]):
-            allergens.append("nuts")
-        return allergens
-
-    @staticmethod
-    def _detect_diet_tags(text: str) -> list[str]:
-        text_lower = text.lower()
-        tags = []
-        if "vegan" in text_lower:
-            tags.append("vegan")
-            tags.append("vegetarian")
-        elif not any(meat in text_lower for meat in ["chicken", "beef", "pork", "fish", "meat", "lamb"]):
-            tags.append("vegetarian")
-        return tags
-
-    def _load_recipes_csv(self, csv_path_or_df) -> list[Document]:
-        if isinstance(csv_path_or_df, pd.DataFrame):
-            df = csv_path_or_df
-        else:
-            df = pd.read_csv(csv_path_or_df)
-
-        documents = []
-        for _idx, row in df.iterrows():
-            if pd.isna(row["recipe_name"]):
-                continue
-
-            text_parts = [
-                f"Recipe: {row['recipe_name']}",
-                f"\nCuisine: {row.get('cuisine_path', 'Not specified')}",
-                f"\nIngredients:\n{row['ingredients']}",
-                f"\nDirections:\n{row['directions']}",
-            ]
-            if pd.notna(row.get("prep_time")):
-                text_parts.append(f"\nPrep Time: {row['prep_time']}")
-            if pd.notna(row.get("cook_time")):
-                text_parts.append(f"\nCook Time: {row['cook_time']}")
-            if pd.notna(row.get("nutrition")):
-                text_parts.append(f"\nNutrition Facts: {row['nutrition']}")
-
-            full_text = "".join(text_parts)
-            metadata: dict[str, Any] = {
-                "doc_type": "recipe",
-                "source_file": "cleaned_recipes",
-                "recipe_name": row["recipe_name"],
-                "servings": row.get("servings", "Not specified"),
-            }
-
-            if pd.notna(row.get("cuisine_path")):
-                cuisine = row["cuisine_path"].split("/")[-1] if "/" in str(row["cuisine_path"]) else row["cuisine_path"]
-                metadata["cuisine"] = cuisine
-            if pd.notna(row.get("prep_time")):
-                prep_str = str(row["prep_time"]).lower()
-                prep_mins = sum(int(s) * (60 if "hr" in prep_str else 1) for s in re.findall(r"\d+", prep_str))
-                metadata["prep_time_min"] = prep_mins
-            if pd.notna(row.get("cook_time")):
-                cook_str = str(row["cook_time"]).lower()
-                cook_mins = sum(int(s) * (60 if "hr" in cook_str else 1) for s in re.findall(r"\d+", cook_str))
-                metadata["cook_time_min"] = cook_mins
-
-            ingredients_text = str(row["ingredients"])
-            metadata["allergens"] = self._detect_allergens(ingredients_text)
-            metadata["diet_tags"] = self._detect_diet_tags(ingredients_text)
-            documents.append(Document(page_content=full_text, metadata=metadata))
-
-        logger.debug("Loaded %d documents from recipes CSV", len(documents))
-        return documents
-
-    def _load_recipes_data_sample_csv(self, csv_path_or_df) -> list[Document]:
-        if isinstance(csv_path_or_df, pd.DataFrame):
-            df = csv_path_or_df
-        else:
-            df = pd.read_csv(csv_path_or_df)
-
-        documents = []
-        for _idx, row in df.iterrows():
-            if pd.isna(row["title"]):
-                continue
-            try:
-                ingredients_list = ast.literal_eval(row["ingredients"])
-                ingredients_text = "\n".join([f"- {ing}" for ing in ingredients_list])
-            except Exception:
-                ingredients_text = row["ingredients"]
-            try:
-                directions_list = ast.literal_eval(row["directions"])
-                directions_text = "\n".join([f"{i + 1}. {step}" for i, step in enumerate(directions_list)])
-            except Exception:
-                directions_text = row["directions"]
-            try:
-                ner_list = ast.literal_eval(row["NER"])
-                ner_text = ", ".join(ner_list)
-            except Exception:
-                ner_list = []
-                ner_text = ""
-
-            text_parts = [
-                f"Recipe: {row['title']}",
-                f"\nIngredients:\n{ingredients_text}",
-                f"\nDirections:\n{directions_text}",
-                f"\nKey Ingredients: {ner_text}",
-            ]
-            full_text = "".join(text_parts)
-            ingredients_raw = str(row["ingredients"])
-            metadata = {
-                "doc_type": "recipe",
-                "source_file": "cleaned_recipes_data_sample",
-                "recipe_name": row["title"],
-                "ingredient_list": ner_list if ner_list else None,
-                "allergens": self._detect_allergens(ingredients_raw),
-                "diet_tags": self._detect_diet_tags(ingredients_raw),
-            }
-            documents.append(Document(page_content=full_text, metadata=metadata))
-
-        logger.debug("Loaded %d documents from recipes_data_sample CSV", len(documents))
-        return documents
-
-    def _load_healthy_meals_csv(self, csv_path_or_df) -> list[Document]:
-        if isinstance(csv_path_or_df, pd.DataFrame):
-            df = csv_path_or_df
-        else:
-            df = pd.read_csv(csv_path_or_df)
-
-        documents = []
-        for _idx, row in df.iterrows():
-            if pd.isna(row["meal_name"]):
-                continue
-
-            text = f"""Meal: {row['meal_name']} ({row['cuisine']} {row['meal_type']})
-Diet Type: {row['diet_type']}
-
-Nutrition per {row['serving_size_g']}g serving:
-- Calories: {row['calories']} kcal
-- Protein: {row['protein_g']}g | Carbs: {row['carbs_g']}g | Fat: {row['fat_g']}g
-- Fiber: {row['fiber_g']}g | Sugar: {row['sugar_g']}g
-- Sodium: {row['sodium_mg']}mg | Cholesterol: {row['cholesterol_mg']}mg
-
-Preparation: {row['cooking_method']} (Prep: {row['prep_time_min']}min, Cook: {row['cook_time_min']}min)
-"""
-            diet_tags = [row["diet_type"].lower()]
-            if row["diet_type"].lower() in ["vegan", "vegetarian"]:
-                diet_tags.append("vegetarian")
-
-            metadata = {
-                "doc_type": "meal",
-                "source_file": "cleaned_healthy_meals",
-                "recipe_name": row["meal_name"],
-                "cuisine": row["cuisine"],
-                "meal_type": row["meal_type"],
-                "diet_type": row["diet_type"],
-                "calories": int(row["calories"]),
-                "protein_g": float(row["protein_g"]),
-                "carbs_g": float(row["carbs_g"]),
-                "fat_g": float(row["fat_g"]),
-                "fiber_g": float(row["fiber_g"]),
-                "sugar_g": float(row["sugar_g"]),
-                "sodium_mg": int(row["sodium_mg"]),
-                "cholesterol_mg": int(row["cholesterol_mg"]),
-                "serving_size_g": int(row["serving_size_g"]),
-                "cooking_method": row["cooking_method"],
-                "prep_time_min": int(row["prep_time_min"]),
-                "cook_time_min": int(row["cook_time_min"]),
-                "diet_tags": diet_tags,
-                "allergens": self._detect_allergens(row["meal_name"]),
-            }
-            documents.append(Document(page_content=text, metadata=metadata))
-
-        logger.debug("Loaded %d documents from healthy_meals CSV", len(documents))
-        return documents
 
     # ================================================================
     # Domain-specific public methods
     # ================================================================
 
-    def get_retrieved_docs(self, query: str) -> list[Document]:
-        if not self.smart_retriever:
-            return []
-        return self.smart_retriever.invoke(query)
-
-    def reload_vectorstores(self) -> None:
-        self._load_vectorstore()
-        self._setup_retriever()
-        self._build_chain()
-
-    def get_stats(self) -> dict[str, Any]:
-        stats = super().get_stats()
-        if self.vectorstore_recipes:
-            stats["vectorstores"] = {
-                "recipes_and_meals": {"vectors": self.vectorstore_recipes.index.ntotal},
-            }
-        stats["k"] = self.k
-        stats["data_folder"] = str(self.data_folder)
-        return stats
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _to_float(value) -> float | None:
     """Safely coerce a JSON value to float, returning None on failure."""

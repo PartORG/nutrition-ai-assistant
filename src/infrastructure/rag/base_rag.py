@@ -12,7 +12,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
@@ -180,15 +180,6 @@ class BaseRAG(ABC):
             chat_model=structured,
         )
 
-    def ask(self, query: str) -> str:
-        """Query the RAG system and return the answer string."""
-        if not self.rag_chain:
-            logger.error("RAG chain not initialized — call initialize() first")
-            return "System not initialized. Call initialize() first."
-
-        logger.debug("Processing query: %s...", query[:80])
-        response = self.rag_chain.invoke({"input": query})
-        return response.get("answer", "No response generated.")
 
     def add_documents(self, file_path: str) -> int:
         """Process a single file and merge into the existing vectorstore."""
@@ -514,22 +505,4 @@ class BaseRAG(ABC):
     # Utilities
     # ================================================================
 
-    def update_system_prompt(self, new_prompt: str) -> None:
-        if "{input}" not in new_prompt or "{context}" not in new_prompt:
-            raise ValueError("Prompt must contain {input} and {context} placeholders")
-        self._custom_prompt = new_prompt
-        self._build_chain()
-        logger.info("System prompt updated and chain rebuilt")
 
-    def get_stats(self) -> dict[str, Any]:
-        stats: dict[str, Any] = {
-            "class": self.__class__.__name__,
-            "provider": self.llm_provider,
-            "model": self.model_name,
-            "temperature": self.temperature,
-            "vectorstore_path": str(self.vectorstore_path),
-            "status": "initialized" if self.rag_chain else "not_initialized",
-        }
-        if self.vectorstore:
-            stats["vector_count"] = self.vectorstore.index.ntotal
-        return stats

@@ -126,4 +126,3 @@ class LLaVAIngredientDetector:
 
 
 # Alias so existing imports (factory.py) still work
-CNNIngredientDetector = LLaVAIngredientDetector

@@ -18,7 +18,7 @@ A personalized nutrition and recipe recommendation system powered by LLM, RAG, a
   <img src="demo_material/7.png" width="220" alt="Image detection" />
 </p>
 
-A full walkthrough video is available at [`demo_material/nutrition_ai_assistent_app_demo.mp4`](demo_material/nutrition_ai_assistent_app_demo.mp4).
+A full walkthrough video and the slide deck live in `demo_material/` locally; they are not tracked in git (see [Repository weight](#repository-weight)).
 
 ---
 
@@ -127,7 +127,6 @@ nutrition-ai-assistant/
 ├── db/                         # SQLite database (created at runtime)
 ├── uploads/                    # Shared image upload directory
 ├── docs/                       # Architecture guide, analysis
-├── demo_material/              # App screenshots and demo video
 ├── tests/                      # Automated tests (pytest) — run by CI
 ├── scripts/                    # Manual operator scripts (index rebuild, smoke checks)
 ├── training/                   # YOLO fine-tuning pipeline (not shipped in the image)
@@ -398,6 +397,23 @@ and almonds. Can you suggest a creative recipe?
 - **Demo data included:** Small CSV datasets in `data/` (cleaned recipes, nutrition facts, healthy meals) are included for demonstration.
 - **Private medical data not included:** Medical research PDFs used by the Medical RAG are private and not committed to this repository.
 - **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. Manage them with `nutriai-index` — see [Vector index management](#vector-index-management) below.
+
+### Repository weight
+
+`notebooks/` (27 MB of exploratory research), the 36 MB demo video and the 4 MB
+slide deck are no longer tracked. They remain on your disk and are gitignored.
+The five README screenshots stay tracked — ~340 KB total, and the page needs
+them to render on GitHub.
+
+**This does not shrink an existing clone.** Git history still contains every
+byte, so `.git` stays around 280 MB and `git clone` is no faster. Actually
+removing them needs a history rewrite (`git filter-repo`), which changes every
+commit hash and forces all 6 contributors to re-clone. That is a coordinated
+decision, not a refactor, so it is deliberately left undone here.
+
+If you decide to do it, the demo video and the 26 MB `dat_recipe_rag.ipynb`
+account for most of the weight, and GitHub Releases is the natural home for the
+video.
 
 ### Nutrition facts are a table, not a vector index
 

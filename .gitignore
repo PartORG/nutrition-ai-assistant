@@ -45,6 +45,17 @@ venv/
 .cache/
 .ipynb_checkpoints/
 
+# ── Large binaries and research artefacts ──
+# Untracked from HEAD in the Phase 5 readability pass: 27 MB of exploratory
+# notebooks, a 36 MB demo video and a 4 MB slide deck. They remain on disk
+# locally and in git history — see README "Repository weight" for why removing
+# them from history is a separate, coordinated decision.
+# The README's screenshots stay tracked: they are ~340 KB total and the page
+# renders them on GitHub.
+notebooks/
+demo_material/*.mp4
+demo_material/*.pdf
+
 # ── ML artifacts ──
 # Model weights and training output are distributed via GitHub Releases,
 # not git. See training/README.md.
