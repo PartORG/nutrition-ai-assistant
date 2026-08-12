@@ -397,7 +397,37 @@ and almonds. Can you suggest a creative recipe?
 
 - **Demo data included:** Small CSV datasets in `data/` (cleaned recipes, nutrition facts, healthy meals) are included for demonstration.
 - **Private medical data not included:** Medical research PDFs used by the Medical RAG are private and not committed to this repository.
-- **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. Rebuild or extend them with the scripts in `scripts/` (`rebuild_indexes.py`, `add_recipe_docs.py`, `add_medical_docs.py`). Run these on the host — docker-compose mounts `vector_databases/` read-only, and the app now fails fast with a clear message rather than attempting a write there.
+- **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. Manage them with `nutriai-index` — see [Vector index management](#vector-index-management) below.
+
+### Vector index management
+
+```bash
+uv run nutriai-index inspect                      # provenance + is it current?
+uv run nutriai-index build                        # build anything missing
+uv run nutriai-index rebuild --target medical     # force a full re-embed
+uv run nutriai-index add --target medical a.pdf   # append without rebuilding
+```
+
+Run these on the host: docker-compose mounts `vector_databases/` read-only, and
+the app now fails fast with a clear message rather than attempting a write there.
+
+Each index carries an `index_meta.json` recording the embedding model, its
+dimension, chunk settings, document count, and a SHA-256 of every source file.
+**The app refuses to load an index whose embedding model or chunking no longer
+matches the running config**, because a same-dimension model swap (`bge-m3` →
+another 1024-d model) would otherwise load cleanly and return near-random
+results. Changed *source data* is reported by `inspect` as advisory — the index
+still loads, it's just behind.
+
+Indexes built before this existed have no sidecar; they load with a warning
+until you run `rebuild` once to stamp them.
+
+Chunking is configurable via `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP` (medical
+corpus only — the recipe corpus is one document per CSV row and is not split).
+The default of 300/50 is preserved from before so upgrading doesn't force a
+rebuild, but ~800/150 is a better starting point: 300 characters is roughly 70
+tokens and splits dosage guidance mid-sentence. Changing it requires a rebuild,
+which the app will tell you about.
 - The system supports dynamically updating or extending vector stores with new data without restarting the application.
 
 ---

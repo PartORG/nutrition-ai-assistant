@@ -382,6 +382,17 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         nutrition_path = self.vectorstore_path / "nutrition_facts_db"
         return recipes_path.exists() and nutrition_path.exists()
 
+    def _index_dimension(self) -> int | None:
+        """Both stores share an embedding model, so the recipes store speaks for both."""
+        if self.vectorstore_recipes is None:
+            return None
+        return int(self.vectorstore_recipes.index.d)
+
+    def _source_files(self) -> list[Path]:
+        """The CSVs this index is built from, for staleness reporting."""
+        folder = Path(self.data_folder)
+        return sorted(folder.glob("*.csv")) if folder.is_dir() else []
+
     def _embeddings_match_index(self) -> bool:
         """Check BOTH stores — the base hook only looks at self.vectorstore."""
         for vectorstore in (self.vectorstore_recipes, self.vectorstore_nutrition):

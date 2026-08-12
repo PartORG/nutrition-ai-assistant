@@ -61,6 +61,7 @@ dependencies = [
 
 [project.scripts]
 nutriai-api = "adapters.rest.app:main"
+nutriai-index = "adapters.cli.index_cli:main"
 
 [dependency-groups]
 dev = [

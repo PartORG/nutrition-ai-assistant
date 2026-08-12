@@ -24,7 +24,16 @@ from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrou
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from domain.exceptions import RAGError
+from infrastructure.config import DEFAULT_EMBEDDING_MODEL
 from infrastructure.llm.llm_builder import build_llm as _build_llm_central
+from infrastructure.rag.index_meta import (
+    META_FILENAME,
+    IndexMeta,
+    describe_mismatch,
+    read_meta,
+    stale_sources,
+    write_meta,
+)
 
 if TYPE_CHECKING:
     from infrastructure.rag.retrieval import Reranker
@@ -50,7 +59,7 @@ class BaseRAG(ABC):
         vectorstore_path: str,
         model_name: str = "llama3.2",
         temperature: float = 0.3,
-        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
+        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         ollama_base_url: str = "http://localhost:11434/",
         llm_format: str | None = None,
         llm_provider: str = "ollama",  # NEW: "ollama", "groq", or "openai"
@@ -112,6 +121,9 @@ class BaseRAG(ABC):
 
         needs_build = force_rebuild or not self._vectorstore_exists()
         if not needs_build:
+            # Check provenance BEFORE loading — refusing early avoids paying to
+            # deserialize an index we already know is wrong.
+            self._verify_index_provenance()
             logger.info("Loading existing vectorstore from disk")
             self._load_vectorstore()
             if not self._embeddings_match_index():
@@ -132,6 +144,7 @@ class BaseRAG(ABC):
                 logger.warning("No documents ingested — RAG will be non-functional")
                 return
             self._build_vectorstore(docs)
+            self._write_index_meta(doc_count=len(docs))
 
         self._setup_retriever()
         self._build_chain()
@@ -236,6 +249,82 @@ class BaseRAG(ABC):
             f"but that path is read-only. Either build the index in a writable "
             f"environment and ship it, or mount the directory read-write "
             f"(docker-compose.yml mounts ./vector_databases with ':ro')."
+        )
+
+    # ---------------- index provenance ----------------
+
+    def _meta_dir(self) -> Path:
+        """Directory holding this RAG's index_meta.json. Override if the layout differs."""
+        return self.vectorstore_path
+
+    def _source_files(self) -> list[Path]:
+        """Source data this index was built from. Override to enable staleness checks."""
+        return []
+
+    def _index_dimension(self) -> int | None:
+        """Embedding dimension of the built index, read from FAISS itself."""
+        if self.vectorstore is None:
+            return None
+        return int(self.vectorstore.index.d)
+
+    def _verify_index_provenance(self) -> None:
+        """Refuse to load an index built by a different embedding model or chunking.
+
+        A same-dimension model swap (bge-m3 -> another 1024-d model) loads fine
+        and returns near-random neighbours, which the dimension probe cannot
+        detect. Failing loudly beats degrading silently.
+
+        Indexes built before provenance existed have no sidecar; those are
+        allowed through with a warning so upgrades don't break.
+        """
+        existing = read_meta(self._meta_dir())
+        if existing is None:
+            logger.warning(
+                "%s index at %s has no %s — it predates provenance tracking. "
+                "Run `nutriai-index rebuild` to stamp it; until then a silent "
+                "embedding-model mismatch cannot be detected.",
+                self.__class__.__name__, self._meta_dir(), META_FILENAME,
+            )
+            return
+
+        reason = describe_mismatch(
+            existing,
+            embedding_model=self.embedding_model_name,
+            chunk_size=getattr(self, "chunk_size", None),
+            chunk_overlap=getattr(self, "chunk_overlap", None),
+        )
+        if reason:
+            raise RAGError(
+                f"{self.__class__.__name__} index at '{self._meta_dir()}' is stale: "
+                f"{reason}. Retrieval would silently return wrong results, so the "
+                f"index will not be loaded. Rebuild it with `nutriai-index rebuild`."
+            )
+
+        changed = stale_sources(existing, self._source_files())
+        if changed:
+            logger.warning(
+                "%s index is valid but its source data changed since %s: %s. "
+                "Run `nutriai-index rebuild` to pick up the new content.",
+                self.__class__.__name__, existing.built_at, ", ".join(changed),
+            )
+
+    def _write_index_meta(self, doc_count: int) -> None:
+        """Stamp provenance beside the index just built."""
+        dim = self._index_dimension()
+        if dim is None:
+            logger.warning("Could not determine index dimension — skipping provenance")
+            return
+        write_meta(
+            self._meta_dir(),
+            IndexMeta.build(
+                embedding_model=self.embedding_model_name,
+                embedding_dim=dim,
+                doc_count=doc_count,
+                rag_class=self.__class__.__name__,
+                chunk_size=getattr(self, "chunk_size", None),
+                chunk_overlap=getattr(self, "chunk_overlap", None),
+                source_files=self._source_files(),
+            ),
         )
 
     def _index_dim_ok(self, vectorstore) -> bool:

@@ -11,21 +11,13 @@ most of them a database and prebuilt vector indexes.
 
 ## Index management
 
-Rebuilding or extending the FAISS indexes. These are the ones you'll actually
-reach for.
-
-| Script | What it does |
-|---|---|
-| `rebuild_indexes.py` | Full rebuild of all vector stores from `data/` |
-| `add_recipe_docs.py` | Append new recipe/nutrition data without a full rebuild |
-| `add_medical_docs.py` | Append new medical documents without a full rebuild |
+Moved to a real command — `nutriai-index`. See the
+[Vector index management](../README.md#vector-index-management) section.
 
 ```bash
-uv run python scripts/rebuild_indexes.py
+uv run nutriai-index inspect     # what's on disk, and is it current?
+uv run nutriai-index rebuild     # full re-embed
 ```
-
-Note the indexes are written to `vector_databases/`, which docker-compose mounts
-read-only — run these on the host, not inside the API container.
 
 ## Smoke checks
 

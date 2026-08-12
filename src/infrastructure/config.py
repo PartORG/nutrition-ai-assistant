@@ -11,6 +11,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# Single source of truth for the embedding model. Previously three different
+# defaults lived in config.py, base_rag.py and medical_rag.py; the factory
+# always overrode them, so the class defaults were traps for any code that
+# constructed a RAG directly (scripts, tests, the index CLI).
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -43,7 +49,17 @@ class Settings:
     # Embeddings (always local HuggingFace — not affected by llm_provider).
     # Shared by both RAGs. Switching this auto-rebuilds the FAISS indices on
     # next startup (dimension-mismatch detection).
-    embedding_model: str = "BAAI/bge-m3"
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL
+
+    # Chunking for the medical corpus (the recipe corpus is one doc per CSV row
+    # and is not split). Changing either invalidates the index — the app will
+    # refuse to load it and tell you to rebuild.
+    #
+    # 300 chars is roughly 70 tokens, which splits dosage guidance mid-sentence.
+    # Kept as the default so upgrading does not silently force a rebuild;
+    # 800/150 is the better starting point when you next reindex.
+    rag_chunk_size: int = 300
+    rag_chunk_overlap: int = 50
 
     # RAG retrieval quality
     #   rag_use_hybrid   - combine dense (FAISS) + sparse (BM25) via RRF
@@ -119,7 +135,9 @@ class Settings:
             llm_model_ollama=os.getenv("LLM_MODEL_OLLAMA", "llama3.2"),
             llm_model_openai=os.getenv("LLM_MODEL_OPENAI", "gpt-4.1-mini"),
             llm_model_groq=os.getenv("LLM_MODEL_GROQ", "llama-3.3-70b-versatile"),
-            embedding_model=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
+            embedding_model=os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
+            rag_chunk_size=int(os.getenv("RAG_CHUNK_SIZE", "300")),
+            rag_chunk_overlap=int(os.getenv("RAG_CHUNK_OVERLAP", "50")),
             rag_use_hybrid=os.getenv("RAG_USE_HYBRID", "true").lower() in ("1", "true", "yes"),
             rag_use_reranker=os.getenv("RAG_USE_RERANKER", "true").lower() in ("1", "true", "yes"),
             rag_reranker_model=os.getenv("RAG_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),

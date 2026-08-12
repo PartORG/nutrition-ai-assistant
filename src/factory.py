@@ -136,6 +136,8 @@ class ServiceFactory:
             model_name=cfg.active_llm_model,
             vectorstore_path=str(cfg.medical_vectorstore_path),
             embedding_model=cfg.embedding_model,
+            chunk_size=cfg.rag_chunk_size,
+            chunk_overlap=cfg.rag_chunk_overlap,
             embeddings=embeddings,
             ollama_base_url=cfg.ollama_base_url,
             llm_provider=cfg.llm_provider,

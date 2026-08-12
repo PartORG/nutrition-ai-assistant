@@ -21,6 +21,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from domain.models import NutritionConstraints
+from infrastructure.config import DEFAULT_EMBEDDING_MODEL
 from infrastructure.rag.base_rag import BaseRAG
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ RULES:
         folder_paths: list[str],
         vectorstore_path: str,
         model_name: str = "llama3.2",
-        embedding_model: str = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1",
+        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         temperature: float = 0.1,
         chunk_size: int = 300,
         chunk_overlap: int = 50,
@@ -105,6 +106,15 @@ RULES:
     # ================================================================
     # BaseRAG implementations
     # ================================================================
+
+    def _source_files(self) -> list[Path]:
+        """The PDFs this index is built from, for staleness reporting."""
+        found: list[Path] = []
+        for folder_path in self.folder_paths:
+            folder = Path(folder_path)
+            if folder.is_dir():
+                found.extend(sorted(folder.glob("*.pdf")))
+        return found
 
     def _ingest_documents(self) -> list[Document]:
         documents = []
