@@ -14,7 +14,7 @@ Supported providers:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel, BaseLLM
 
@@ -30,9 +30,9 @@ def build_llm(
     openai_api_key: str = "",
     groq_api_key: str = "",
     json_mode: bool = False,
-    max_tokens: Optional[int] = None,
+    max_tokens: int | None = None,
     chat_model: bool = False,
-) -> Union[BaseChatModel, BaseLLM]:
+) -> BaseChatModel | BaseLLM:
     """Build an LLM instance for the given provider.
 
     Args:
@@ -61,7 +61,7 @@ def build_llm(
         if not openai_api_key:
             raise ValueError("OPENAI_API_KEY is required when LLM_PROVIDER='openai'")
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": model,
             "temperature": temperature,
             "openai_api_key": openai_api_key,

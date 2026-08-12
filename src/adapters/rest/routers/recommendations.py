@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter, Depends
 
-from factory import ServiceFactory
-from adapters.rest.dependencies import get_factory, get_current_user, CurrentUser, build_session_ctx
+from adapters.rest.dependencies import CurrentUser, build_session_ctx, get_current_user, get_factory
 from adapters.rest.schemas import RecommendationBody, RecommendationOut
+from factory import ServiceFactory
 
 router = APIRouter(tags=["recommendations"])
 

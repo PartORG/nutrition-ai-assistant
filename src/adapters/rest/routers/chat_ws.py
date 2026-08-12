@@ -1,14 +1,16 @@
 """WebSocket endpoint for real-time conversational agent."""
 
+import logging
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-import logging
-
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from adapters.rest.dependencies import (
-    get_factory, get_current_user, build_session_ctx, CurrentUser,
+    CurrentUser,
+    build_session_ctx,
+    get_current_user,
+    get_factory,
 )
 
 router = APIRouter()

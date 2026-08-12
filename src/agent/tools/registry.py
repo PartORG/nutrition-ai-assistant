@@ -12,8 +12,8 @@ from typing import Any
 
 from langchain_core.tools import StructuredTool
 
+from agent.tools.base import BaseTool
 from application.context import SessionContext
-from agent.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 

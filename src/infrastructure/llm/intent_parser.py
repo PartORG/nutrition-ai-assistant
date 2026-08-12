@@ -20,8 +20,8 @@ import logging
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
-from domain.models import UserIntent
 from domain.exceptions import IntentParsingError
+from domain.models import UserIntent
 from infrastructure.llm.llm_builder import build_llm
 
 logger = logging.getLogger(__name__)

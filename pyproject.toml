@@ -115,6 +115,20 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    # Nearly every long line is an embedded LLM prompt, where reflowing the
+    # string would change what the model actually receives.
+    "E501",
+    # `param = Depends(...)` in a default argument is the FastAPI idiom.
+    "B008",
+    # SafetyVerdict(str, Enum) is deliberate — its .value is compared against
+    # strings that cross the API boundary.
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Operator scripts prepend src/ to sys.path before importing from it.
+"scripts/*" = ["E402"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

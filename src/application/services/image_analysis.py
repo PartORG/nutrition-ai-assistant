@@ -12,12 +12,11 @@ The service composes IngredientDetectorPort with RecommendationService.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
+from application.context import SessionContext
+from application.dto import ImageAnalysisResult
 from domain.models import DetectedIngredients
 from domain.ports import IngredientDetectorPort
-from application.context import SessionContext
-from application.dto import ImageAnalysisResult, RecommendationResult
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ class ImageAnalysisService:
     def __init__(
         self,
         detector: IngredientDetectorPort,
-        recommendation_service: Optional[object] = None,
+        recommendation_service: object | None = None,
     ):
         self._detector = detector
         # Avoid circular import: recommendation_service is typed loosely here,

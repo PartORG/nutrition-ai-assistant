@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from factory import ServiceFactory
-from adapters.rest.dependencies import get_factory, get_current_user, CurrentUser
+from adapters.rest.dependencies import CurrentUser, get_current_user, get_factory
 from adapters.rest.schemas import ConversationOut, MessageOut
+from factory import ServiceFactory
 
 router = APIRouter(tags=["conversations"])
 

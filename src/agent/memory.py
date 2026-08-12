@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 if TYPE_CHECKING:
     from application.services.chat_history import ChatHistoryService

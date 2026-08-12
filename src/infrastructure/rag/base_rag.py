@@ -12,16 +12,16 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Dict, Any, Optional, Set
+from typing import TYPE_CHECKING, Any, Optional
 
-from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
+from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from domain.exceptions import RAGError
 from infrastructure.llm.llm_builder import build_llm as _build_llm_central
@@ -52,15 +52,15 @@ class BaseRAG(ABC):
         temperature: float = 0.3,
         embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
         ollama_base_url: str = "http://localhost:11434/",
-        llm_format: Optional[str] = None,
+        llm_format: str | None = None,
         llm_provider: str = "ollama",  # NEW: "ollama", "groq", or "openai"
-        openai_api_key: Optional[str] = None,  # NEW: API key for OpenAI
-        groq_api_key: Optional[str] = None,  # NEW: API key for Groq
+        openai_api_key: str | None = None,  # NEW: API key for OpenAI
+        groq_api_key: str | None = None,  # NEW: API key for Groq
         use_hybrid: bool = False,  # dense + BM25 hybrid retrieval
         reranker: Optional["Reranker"] = None,  # cross-encoder rerank pass
         fetch_k: int = 30,  # candidate pool size before rerank
         rerank_top_n: int = 8,  # docs returned after rerank
-        embeddings: Optional[HuggingFaceEmbeddings] = None,  # shared, prebuilt instance
+        embeddings: HuggingFaceEmbeddings | None = None,  # shared, prebuilt instance
     ):
         self.vectorstore_path = Path(vectorstore_path)
         self.model_name = model_name
@@ -77,13 +77,13 @@ class BaseRAG(ABC):
         self.rerank_top_n = rerank_top_n
         self._injected_embeddings = embeddings
 
-        self.embeddings: Optional[HuggingFaceEmbeddings] = None
-        self.llm: Optional[BaseChatModel] = None  # CHANGED: more generic type
-        self.vectorstore: Optional[FAISS] = None
+        self.embeddings: HuggingFaceEmbeddings | None = None
+        self.llm: BaseChatModel | None = None  # CHANGED: more generic type
+        self.vectorstore: FAISS | None = None
         self.retriever = None
         self.rag_chain = None
 
-        self._custom_prompt: Optional[str] = None
+        self._custom_prompt: str | None = None
 
         logger.info(
             "%s instance created (provider=%s, model=%s, vectorstore=%s)",
@@ -197,11 +197,11 @@ class BaseRAG(ABC):
     # ================================================================
 
     @abstractmethod
-    def _ingest_documents(self) -> List[Document]:
+    def _ingest_documents(self) -> list[Document]:
         """Load all raw data and return a list of LangChain Documents."""
 
     @abstractmethod
-    def _ingest_single_file(self, file_path: str) -> List[Document]:
+    def _ingest_single_file(self, file_path: str) -> list[Document]:
         """Load a single file and return a list of LangChain Documents."""
 
     # ================================================================
@@ -266,7 +266,7 @@ class BaseRAG(ABC):
         Subclasses with multiple stores / resumable ingestion override this.
         """
 
-    def _build_vectorstore(self, documents: List[Document]) -> None:
+    def _build_vectorstore(self, documents: list[Document]) -> None:
         logger.info("Creating FAISS index from %d documents", len(documents))
         self.vectorstore = FAISS.from_documents(
             documents=documents,
@@ -286,7 +286,7 @@ class BaseRAG(ABC):
         )
         logger.info("Vectorstore loaded (%d vectors)", self.vectorstore.index.ntotal)
 
-    def _merge_into_vectorstore(self, documents: List[Document]) -> None:
+    def _merge_into_vectorstore(self, documents: list[Document]) -> None:
         new_store = FAISS.from_documents(
             documents=documents,
             embedding=self.embeddings,
@@ -330,7 +330,7 @@ class BaseRAG(ABC):
     # ================================================================
 
     @staticmethod
-    def _format_docs(docs: List[Document]) -> str:
+    def _format_docs(docs: list[Document]) -> str:
         """Join retrieved documents into the prompt's ``{context}`` string.
 
         Matches the default document separator used by the legacy
@@ -378,15 +378,15 @@ class BaseRAG(ABC):
     def _index_meta_path(self) -> Path:
         return self.vectorstore_path.parent / f"{self.vectorstore_path.name}_indexed.json"
 
-    def _get_indexed_files(self) -> Set[str]:
+    def _get_indexed_files(self) -> set[str]:
         meta_path = self._index_meta_path()
         if not meta_path.exists():
             return set()
-        with open(meta_path, "r", encoding="utf-8") as f:
+        with open(meta_path, encoding="utf-8") as f:
             data = json.load(f)
         return set(data.get("files", []))
 
-    def _save_indexed_files(self, files: Set[str]) -> None:
+    def _save_indexed_files(self, files: set[str]) -> None:
         meta_path = self._index_meta_path()
         meta_path.parent.mkdir(parents=True, exist_ok=True)
         with open(meta_path, "w", encoding="utf-8") as f:
@@ -403,8 +403,8 @@ class BaseRAG(ABC):
         self._build_chain()
         logger.info("System prompt updated and chain rebuilt")
 
-    def get_stats(self) -> Dict[str, Any]:
-        stats: Dict[str, Any] = {
+    def get_stats(self) -> dict[str, Any]:
+        stats: dict[str, Any] = {
             "class": self.__class__.__name__,
             "provider": self.llm_provider,
             "model": self.model_name,

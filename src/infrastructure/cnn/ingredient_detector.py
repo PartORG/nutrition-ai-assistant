@@ -26,8 +26,8 @@ import logging
 import re
 from pathlib import Path
 
-from domain.models import DetectedIngredients
 from domain.exceptions import IngredientDetectionError
+from domain.models import DetectedIngredients
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,11 @@ Implements RecipeRepository port. Extracted from db.py (lines 574-640).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone         # Use timezone-aware timestamps for better handling of timezones in the future
+from datetime import (  # Use timezone-aware timestamps for better handling of timezones in the future
+    UTC,
+    datetime,
+)
+
 from domain.entities import RecipeHistory
 from infrastructure.persistence.connection import AsyncSQLiteConnection
 
@@ -21,7 +25,7 @@ class SQLiteRecipeRepository:
         self._conn = connection
 
     async def save(self, history: RecipeHistory) -> int:
-        now = datetime.now(timezone.utc).isoformat()        # Store in UTC for consistency; convert to local time in application logic if needed
+        now = datetime.now(UTC).isoformat()        # Store in UTC for consistency; convert to local time in application logic if needed
         async with self._conn.acquire() as conn:
             cursor = await conn.execute(
                 """INSERT INTO recipe_history
@@ -53,7 +57,7 @@ class SQLiteRecipeRepository:
             return [self._row_to_history(r) for r in rows]
 
     async def soft_delete(self, history_id: int) -> None:
-        now = datetime.now(timezone.utc).isoformat()                # Use timezone-aware timestamps for better handling of timezones in the future; store in UTC for consistency
+        now = datetime.now(UTC).isoformat()                # Use timezone-aware timestamps for better handling of timezones in the future; store in UTC for consistency
         async with self._conn.acquire() as conn:
             await conn.execute(
                 "UPDATE recipe_history SET deleted_at = ? WHERE id = ?",

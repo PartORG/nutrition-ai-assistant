@@ -8,9 +8,8 @@ that can be constructed from environment or passed explicitly.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -96,7 +95,7 @@ class Settings:
         return self.llm_model_ollama
 
     @classmethod
-    def from_env(cls, project_root: Optional[Path] = None) -> Settings:
+    def from_env(cls, project_root: Path | None = None) -> Settings:
         """Build Settings from standard project layout."""
         from dotenv import load_dotenv
         load_dotenv()

@@ -10,21 +10,23 @@ Supports selection by number (recipe_numbers=[2]) AND by name
 
 from __future__ import annotations
 
-from typing import List, Optional, Union
+import logging
 
 from pydantic import BaseModel, Field, field_validator
 
-from domain.models import Recipe
-from application.context import SessionContext
-from application.services.recipe_manager import RecipeManagerService
-from application.dto import RecommendationResult
 from agent.tools.base import BaseTool, ToolResult
+from application.context import SessionContext
+from application.dto import RecommendationResult
+from application.services.recipe_manager import RecipeManagerService
+from domain.models import Recipe
+
+logger = logging.getLogger(__name__)
 
 
 class SaveRecipeInput(BaseModel):
     """Input schema for the save_recipe tool."""
 
-    recipe_numbers: Optional[List[int]] = Field(
+    recipe_numbers: list[int] | None = Field(
         default=None,
         description=(
             "List of 1-based recipe numbers to save, e.g. [2] or [1, 3]. "
@@ -32,7 +34,7 @@ class SaveRecipeInput(BaseModel):
             "Omit (or pass null) when using recipe_name instead."
         ),
     )
-    recipe_name: Optional[str] = Field(
+    recipe_name: str | None = Field(
         default=None,
         description=(
             "Partial or full recipe name to save, e.g. 'salmon' or 'Grilled Salmon'. "
@@ -40,7 +42,7 @@ class SaveRecipeInput(BaseModel):
             "Fuzzy matching finds the closest recipe automatically."
         ),
     )
-    rating: Optional[int] = Field(
+    rating: int | None = Field(
         default=None,
         description=(
             "Optional star rating 1-5. "
@@ -50,7 +52,7 @@ class SaveRecipeInput(BaseModel):
 
     @field_validator("recipe_numbers", mode="before")
     @classmethod
-    def coerce_to_int_list(cls, v: object) -> Optional[List[int]]:
+    def coerce_to_int_list(cls, v: object) -> list[int] | None:
         """Accept int, str, list, or None — normalise to List[int] or None.
 
         Handles LLM quirks like a bare int, 'recipe 1', or ['recipe 1', 'recipe 2'].
@@ -85,7 +87,7 @@ class SaveRecipeInput(BaseModel):
 
     @field_validator("rating", mode="before")
     @classmethod
-    def coerce_rating(cls, v: object) -> Optional[int]:
+    def coerce_rating(cls, v: object) -> int | None:
         """Treat nil/none/null strings as None so Pydantic doesn't reject them."""
         if v is None:
             return None
@@ -115,13 +117,13 @@ class SaveRecipeTool(BaseTool):
     async def execute(
         self,
         ctx: SessionContext,
-        recipe_numbers: Union[List[int], None] = None,
-        recipe_name: Optional[str] = None,
-        rating: Optional[int] = None,
+        recipe_numbers: list[int] | None = None,
+        recipe_name: str | None = None,
+        rating: int | None = None,
         **kwargs,
     ) -> ToolResult:
         """Save the user's selected recipe(s), resolving by number or name."""
-        rec_result: Optional[RecommendationResult] = ctx.scratch.get("last_recommendations")
+        rec_result: RecommendationResult | None = ctx.scratch.get("last_recommendations")
 
         if rec_result is not None:
             recipes = rec_result.safe_recipes
@@ -138,7 +140,7 @@ class SaveRecipeTool(BaseTool):
                 )
             )
 
-        numbers: List[int] = list(recipe_numbers) if recipe_numbers else []
+        numbers: list[int] = list(recipe_numbers) if recipe_numbers else []
 
         # Name-based fallback: resolve fuzzy name → recipe number
         if not numbers and recipe_name:
@@ -172,8 +174,8 @@ class SaveRecipeTool(BaseTool):
         turn_key = f"_saved_{ctx.request_id}"
         saved_this_turn: dict = ctx.scratch.setdefault(turn_key, {})
 
-        saved_lines: List[str] = []
-        errors: List[str] = []
+        saved_lines: list[str] = []
+        errors: list[str] = []
 
         for num in numbers:
             if num < 1 or num > len(recipes):
@@ -219,7 +221,7 @@ class SaveRecipeTool(BaseTool):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _find_by_name(name: str, recipes: List[Recipe]) -> Optional[int]:
+def _find_by_name(name: str, recipes: list[Recipe]) -> int | None:
     """Find a recipe by fuzzy name matching. Returns 1-based index or None.
 
     Three strategies (in priority order):
@@ -251,7 +253,7 @@ def _find_by_name(name: str, recipes: List[Recipe]) -> Optional[int]:
 
 def _format_saved_recipe(recipe: Recipe, number: int, history_id: int) -> str:
     """Build a rich one-line confirmation for a saved recipe."""
-    details: List[str] = []
+    details: list[str] = []
     if recipe.servings:
         details.append(f"serves {recipe.servings}")
     if recipe.prep_time:

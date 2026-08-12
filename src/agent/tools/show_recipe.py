@@ -8,20 +8,18 @@ No DB writes — display only.
 
 from __future__ import annotations
 
-from typing import Union
-
 from pydantic import BaseModel, Field, field_validator
 
+from agent.tools.base import BaseTool, ToolResult
 from application.context import SessionContext
 from application.dto import RecommendationResult
-from domain.models import Recipe, NutritionValues
-from agent.tools.base import BaseTool, ToolResult
+from domain.models import NutritionValues, Recipe
 
 
 class ShowRecipeInput(BaseModel):
     """Input schema for the show_recipe tool."""
 
-    recipe_number: Union[int, list[int]] = Field(
+    recipe_number: int | list[int] = Field(
         description=(
             "The 1-based number(s) of the recipe(s) to display, matching the "
             "numbered list already shown to the user (e.g. 1, 2, or [1, 2, 3])."
@@ -63,7 +61,7 @@ class ShowRecipeTool(BaseTool):
     async def execute(
         self,
         ctx: SessionContext,
-        recipe_number: Union[int, list[int]] = 1,
+        recipe_number: int | list[int] = 1,
         **kwargs,
     ) -> ToolResult:
         """Return a detailed markdown view of the requested recipe(s)."""

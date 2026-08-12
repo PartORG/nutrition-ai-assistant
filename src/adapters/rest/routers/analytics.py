@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from adapters.rest.dependencies import CurrentUser, get_current_user, get_factory
 from factory import ServiceFactory
-from adapters.rest.dependencies import get_factory, get_current_user, CurrentUser
 
 router = APIRouter(tags=["analytics"])
 

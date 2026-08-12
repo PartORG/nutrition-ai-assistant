@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
 
 from domain.entities import Conversation
 from infrastructure.persistence.connection import AsyncSQLiteConnection
@@ -47,7 +46,7 @@ class SQLiteConversationRepository:
 
     async def get_by_conversation_id(
         self, conversation_id: str,
-    ) -> Optional[Conversation]:
+    ) -> Conversation | None:
         async with self._conn.acquire() as conn:
             rows = await conn.execute_fetchall(
                 """SELECT * FROM conversations
@@ -82,7 +81,7 @@ class SQLiteConversationRepository:
                 (cache_json, conversation_id),
             )
 
-    async def get_recipe_cache(self, conversation_id: str) -> Optional[str]:
+    async def get_recipe_cache(self, conversation_id: str) -> str | None:
         """Return the cached recipe list JSON for a conversation, or None."""
         async with self._conn.acquire() as conn:
             rows = await conn.execute_fetchall(

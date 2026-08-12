@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from application.context import SessionContext
 from agent.tools.base import BaseTool, ToolResult
+from application.context import SessionContext
 
 
 class SafetyGuardInput(BaseModel):

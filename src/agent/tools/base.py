@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -25,7 +25,7 @@ class ToolResult:
     """
     output: str
     data: Any = None
-    store_as: Optional[str] = None
+    store_as: str | None = None
 
 
 class BaseTool(ABC):

@@ -21,24 +21,23 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import Optional
 
+from application.context import SessionContext
+from application.dto import RecommendationResult
+from domain.exceptions import RAGError
 from domain.models import (
-    UserIntent,
     NutritionConstraints,
     Recipe,
+    UserIntent,
 )
 from domain.ports import (
     IntentParserPort,
     MedicalRAGPort,
-    RecipeRAGPort,
-    SafetyFilterPort,
     MedicalRepository,
     NutritionRepository,
+    RecipeRAGPort,
+    SafetyFilterPort,
 )
-from domain.exceptions import RAGError
-from application.context import SessionContext
-from application.dto import RecommendationResult
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +361,7 @@ class RecommendationService:
         by the profile-edit endpoint before RAG had ever run for this user).
         """
         import json
+
         from domain.entities import MedicalAdvice
 
         health_condition     = ", ".join(conditions)
@@ -468,7 +468,7 @@ class RecommendationService:
         original_query: str,
         intent: UserIntent,
         constraints: NutritionConstraints,
-        daily_totals: Optional[dict] = None,
+        daily_totals: dict | None = None,
     ) -> str:
         """Build an enriched query for the Recipe/Nutrition RAG.
 
@@ -644,14 +644,14 @@ def _adjust_for_daily_budget(
     )
 
 
-def _split_or_empty(value: Optional[str]) -> list[str]:
+def _split_or_empty(value: str | None) -> list[str]:
     """Split a comma/newline-separated string into a list, or return []."""
     if not value:
         return []
     return [item.strip() for item in value.replace("\n", ",").split(",") if item.strip()]
 
 
-def _parse_constraints_str(value: Optional[str]) -> dict:
+def _parse_constraints_str(value: str | None) -> dict:
     """Parse a JSON-like constraints string, or return empty dict."""
     if not value:
         return {}
@@ -662,7 +662,7 @@ def _parse_constraints_str(value: Optional[str]) -> dict:
         return {}
 
 
-def _try_parse_corrupt_advice(raw: str) -> Optional[NutritionConstraints]:
+def _try_parse_corrupt_advice(raw: str) -> NutritionConstraints | None:
     """Try to parse a corrupt medical_advice DB value into NutritionConstraints.
 
     Handles two legacy storage formats:

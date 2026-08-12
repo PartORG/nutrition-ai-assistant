@@ -25,47 +25,44 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from pathlib import Path
-from typing import Optional
 
-from infrastructure.config import Settings
-from infrastructure.persistence.connection import AsyncSQLiteConnection
-from infrastructure.persistence.migrations import run_migrations
-from infrastructure.persistence.user_repo import SQLiteUserRepository
-from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
-from infrastructure.persistence.recipe_repo import SQLiteRecipeRepository
-from infrastructure.persistence.nutrition_repo import SQLiteNutritionRepository
-from infrastructure.persistence.profile_repo import SQLiteProfileRepository
-from infrastructure.persistence.conversation_repo import SQLiteConversationRepository
-from infrastructure.persistence.chat_message_repo import SQLiteChatMessageRepository
-from infrastructure.persistence.auth_repo import SQLiteAuthenticationRepository
-from infrastructure.persistence.analytics_repo import SQLiteAnalyticsRepository
-from infrastructure.llm.intent_parser import IntentParser
-from infrastructure.llm.safety_filter import SafetyFilter
-from infrastructure.rag.medical_rag import MedicalRAG
-from infrastructure.rag.recipe_rag import RecipeNutritionRAG
-from infrastructure.cnn.ingredient_detector import LLaVAIngredientDetector
-from application.context import SessionContext
-from application.services.recommendation import RecommendationService
-from application.services.recipe_manager import RecipeManagerService
-from application.services.profile import ProfileService
-from application.services.image_analysis import ImageAnalysisService
-from application.services.chat_history import ChatHistoryService
-from application.services.authentication import AuthenticationService
-from agent.tools.registry import ToolRegistry
-from agent.tools.search_recipes import SearchRecipesTool
-from agent.tools.save_recipe import SaveRecipeTool
-from agent.tools.analyze_image import AnalyzeImageTool
-from agent.tools.show_recipe import ShowRecipeTool
-from agent.tools.general_chat import GeneralChatTool
-from agent.tools.nutrition_status import NutritionStatusTool
-from agent.tools.safety_guard import SafetyGuardTool
-from agent.tools.crisis_support import CrisisSupportTool
+from agent.executor import AgentExecutor
 from agent.memory import ConversationMemory
 from agent.prompt import build_system_prompt
-from agent.executor import AgentExecutor
+from agent.tools.analyze_image import AnalyzeImageTool
+from agent.tools.crisis_support import CrisisSupportTool
+from agent.tools.general_chat import GeneralChatTool
+from agent.tools.nutrition_status import NutritionStatusTool
+from agent.tools.registry import ToolRegistry
+from agent.tools.safety_guard import SafetyGuardTool
+from agent.tools.save_recipe import SaveRecipeTool
+from agent.tools.search_recipes import SearchRecipesTool
+from agent.tools.show_recipe import ShowRecipeTool
+from application.context import SessionContext
+from application.services.authentication import AuthenticationService
+from application.services.chat_history import ChatHistoryService
+from application.services.image_analysis import ImageAnalysisService
+from application.services.profile import ProfileService
+from application.services.recipe_manager import RecipeManagerService
+from application.services.recommendation import RecommendationService
+from infrastructure.cnn.ingredient_detector import LLaVAIngredientDetector
+from infrastructure.config import Settings
+from infrastructure.llm.intent_parser import IntentParser
+from infrastructure.llm.safety_filter import SafetyFilter
+from infrastructure.persistence.analytics_repo import SQLiteAnalyticsRepository
+from infrastructure.persistence.auth_repo import SQLiteAuthenticationRepository
+from infrastructure.persistence.chat_message_repo import SQLiteChatMessageRepository
+from infrastructure.persistence.connection import AsyncSQLiteConnection
+from infrastructure.persistence.conversation_repo import SQLiteConversationRepository
+from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
+from infrastructure.persistence.migrations import run_migrations
+from infrastructure.persistence.nutrition_repo import SQLiteNutritionRepository
+from infrastructure.persistence.profile_repo import SQLiteProfileRepository
+from infrastructure.persistence.recipe_repo import SQLiteRecipeRepository
+from infrastructure.persistence.user_repo import SQLiteUserRepository
+from infrastructure.rag.medical_rag import MedicalRAG
+from infrastructure.rag.recipe_rag import RecipeNutritionRAG
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +79,11 @@ class ServiceFactory:
         self._connection = AsyncSQLiteConnection(config.db_path)
 
         # Lazy singletons for expensive resources
-        self._medical_rag: Optional[MedicalRAG] = None
-        self._recipe_rag: Optional[RecipeNutritionRAG] = None
+        self._medical_rag: MedicalRAG | None = None
+        self._recipe_rag: RecipeNutritionRAG | None = None
         self._agent_llm = None
-        self._intent_parser: Optional[IntentParser] = None
-        self._safety_filter: Optional[SafetyFilter] = None
+        self._intent_parser: IntentParser | None = None
+        self._safety_filter: SafetyFilter | None = None
         self._image_detector = None
 
         self._initialized = False

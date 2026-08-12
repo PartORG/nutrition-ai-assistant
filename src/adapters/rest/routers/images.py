@@ -1,16 +1,15 @@
 """Protected image analysis endpoint (file upload)."""
 
 import os
-import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import JSONResponse
 
-from factory import ServiceFactory
-from adapters.rest.dependencies import get_factory, get_current_user, CurrentUser, build_session_ctx
+from adapters.rest.dependencies import CurrentUser, build_session_ctx, get_current_user, get_factory
 from adapters.rest.schemas import ImageAnalysisOut
+from factory import ServiceFactory
 
 router = APIRouter(tags=["images"])
 

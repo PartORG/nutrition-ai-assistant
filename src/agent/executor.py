@@ -14,16 +14,16 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.prebuilt import create_react_agent
 
-from application.context import SessionContext
-from agent.tools.registry import ToolRegistry
 from agent.memory import ConversationMemory
-from domain.models import Recipe, NutritionValues
+from agent.tools.registry import ToolRegistry
+from application.context import SessionContext
+from domain.models import NutritionValues, Recipe
 
 if TYPE_CHECKING:
     from application.services.chat_history import ChatHistoryService
@@ -297,7 +297,7 @@ async def _route_image_if_present(
 # Recipe cache serialization (for cross-session persistence)
 # ---------------------------------------------------------------------------
 
-def _serialize_recipes(recipes: List[Recipe]) -> str:
+def _serialize_recipes(recipes: list[Recipe]) -> str:
     """Convert a list of Recipe objects to a JSON string for DB storage."""
     return json.dumps([
         {
@@ -321,10 +321,10 @@ def _serialize_recipes(recipes: List[Recipe]) -> str:
     ])
 
 
-def _deserialize_recipes(json_str: str) -> List[Recipe]:
+def _deserialize_recipes(json_str: str) -> list[Recipe]:
     """Reconstruct a list of Recipe objects from a JSON string."""
     data = json.loads(json_str)
-    result: List[Recipe] = []
+    result: list[Recipe] = []
     for d in data:
         n = d.get("nutrition", {})
         result.append(Recipe(

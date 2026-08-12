@@ -1,12 +1,13 @@
 """Protected profile endpoint."""
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 import asyncio
 
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+from adapters.rest.dependencies import CurrentUser, build_session_ctx, get_current_user, get_factory
+from adapters.rest.schemas import MedicalAdviceOut, ProfileOut, UserOut
 from factory import ServiceFactory
-from adapters.rest.dependencies import get_factory, get_current_user, CurrentUser, build_session_ctx
-from adapters.rest.schemas import ProfileOut, MedicalAdviceOut, UserOut
 
 router = APIRouter(tags=["profile"])
 
@@ -110,7 +111,7 @@ async def update_profile(
     
     # Fetch updated user
     user_entity = await user_repo.get_by_id(user.user_id)
-    print(f"🔵 Backend: User updated successfully")
+    print("🔵 Backend: User updated successfully")
     
     return {
         "message": "Profile updated successfully",
@@ -132,9 +133,9 @@ async def update_health(
     factory: ServiceFactory = Depends(get_factory),
 ):
     """Update health conditions in the latest profile history."""
-    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
-    from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
     from domain.entities import UserProfileHistory
+    from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
+    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
     profile_repo = SQLiteProfileRepository(factory._connection)
 
     profiles = await profile_repo.get_by_user(user.user_id)
@@ -173,8 +174,8 @@ async def update_preferences(
     factory: ServiceFactory = Depends(get_factory),
 ):
     """Update food preferences in the latest profile history."""
-    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
     from domain.entities import UserProfileHistory
+    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
     profile_repo = SQLiteProfileRepository(factory._connection)
 
     profiles = await profile_repo.get_by_user(user.user_id)
@@ -195,8 +196,8 @@ async def update_restrictions(
     factory: ServiceFactory = Depends(get_factory),
 ):
     """Update dietary restrictions / dislikes in the latest profile history."""
-    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
     from domain.entities import UserProfileHistory
+    from infrastructure.persistence.profile_repo import SQLiteProfileRepository
     profile_repo = SQLiteProfileRepository(factory._connection)
 
     profiles = await profile_repo.get_by_user(user.user_id)
@@ -217,8 +218,8 @@ async def update_dietary_constraints(
     factory: ServiceFactory = Depends(get_factory),
 ):
     """Update dietary constraints in the latest medical advice."""
-    from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
     from domain.entities import MedicalAdvice
+    from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
     medical_repo = SQLiteMedicalRepository(factory._connection)
 
     advices = await medical_repo.get_by_user(user.user_id)

@@ -10,14 +10,13 @@ themselves. The _now() helper from the old models.py is removed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
 class User:
     """Core user entity."""
-    id: Optional[int] = None
+    id: int | None = None
     name: str = ""
     surname: str = ""
     user_name: str = ""
@@ -32,13 +31,13 @@ class User:
 @dataclass
 class MedicalAdvice:
     """Medical dietary advice linked to a user."""
-    id: Optional[int] = None
+    id: int | None = None
     health_condition: str = ""
     medical_advice: str = ""
     dietary_limit: str = ""
     avoid: str = ""
     dietary_constraints: str = ""
-    user_id: Optional[int] = None
+    user_id: int | None = None
     created_at: str = ""
     updated_at: str = ""
     deleted_at: str = ""
@@ -47,11 +46,11 @@ class MedicalAdvice:
 @dataclass
 class Authentication:
     """Login credentials for a user."""
-    id: Optional[int] = None
+    id: int | None = None
     login: str = ""
     password: str = ""
     role: str = ""
-    user_id: Optional[int] = None
+    user_id: int | None = None
     created_at: str = ""
     updated_at: str = ""
     deleted_at: str = ""
@@ -60,11 +59,11 @@ class Authentication:
 @dataclass
 class UserProfileHistory:
     """Historical snapshot of user dietary profile."""
-    id: Optional[int] = None
+    id: int | None = None
     preferences: str = ""
     health_condition: str = ""
     restrictions: str = ""
-    user_id: Optional[int] = None
+    user_id: int | None = None
     created_at: str = ""
     updated_at: str = ""
     deleted_at: str = ""
@@ -73,10 +72,10 @@ class UserProfileHistory:
 @dataclass
 class RecipeHistory:
     """Record of a recipe recommendation/selection by a user."""
-    id: Optional[int] = None
-    user_id: Optional[int] = None
-    recipe_id: Optional[int] = None
-    rating: Optional[int] = None
+    id: int | None = None
+    user_id: int | None = None
+    recipe_id: int | None = None
+    rating: int | None = None
     recipe_name: str = ""
     servings: int = 0
     ingredients: str = ""
@@ -90,9 +89,9 @@ class RecipeHistory:
 @dataclass
 class NutritionHistory:
     """Nutritional facts for a saved recipe."""
-    id: Optional[int] = None
-    user_id: Optional[int] = None
-    recipe_id: Optional[int] = None
+    id: int | None = None
+    user_id: int | None = None
+    recipe_id: int | None = None
     calories: float = 0.0
     protein: float = 0.0
     fat: float = 0.0
@@ -108,8 +107,8 @@ class NutritionHistory:
 @dataclass
 class Conversation:
     """Metadata for a conversation session."""
-    id: Optional[int] = None
-    user_id: Optional[int] = None
+    id: int | None = None
+    user_id: int | None = None
     conversation_id: str = ""
     title: str = ""
     last_message_at: str = ""
@@ -121,8 +120,8 @@ class Conversation:
 @dataclass
 class ChatMessage:
     """A single message in a conversation."""
-    id: Optional[int] = None
-    user_id: Optional[int] = None
+    id: int | None = None
+    user_id: int | None = None
     conversation_id: str = ""
     role: str = ""  # "user" or "assistant"
     content: str = ""

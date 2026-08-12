@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
-
 
 # ---------------------------------------------------------------------------
 # User Intent
@@ -67,7 +65,7 @@ class NutritionConstraints:
     foods_to_increase: list[str] = field(default_factory=list)
     avoid: list[str] = field(default_factory=list)
     limit: list[str] = field(default_factory=list)
-    constraints: dict[str, dict[str, Optional[float]]] = field(default_factory=dict)
+    constraints: dict[str, dict[str, float | None]] = field(default_factory=dict)
     notes: str = ""
 
     @classmethod
@@ -107,14 +105,14 @@ class NutritionConstraints:
 @dataclass(frozen=True)
 class NutritionValues:
     """Parsed nutrition values from a recipe (per serving)."""
-    calories: Optional[float] = None
-    protein_g: Optional[float] = None
-    carbs_g: Optional[float] = None
-    fat_g: Optional[float] = None
-    fiber_g: Optional[float] = None
-    sodium_mg: Optional[float] = None
-    sugar_g: Optional[float] = None
-    saturated_fat_g: Optional[float] = None
+    calories: float | None = None
+    protein_g: float | None = None
+    carbs_g: float | None = None
+    fat_g: float | None = None
+    fiber_g: float | None = None
+    sodium_mg: float | None = None
+    sugar_g: float | None = None
+    saturated_fat_g: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +132,7 @@ class Recipe:
     servings: int = 0
     prep_time: str = ""
     cook_instructions: str = ""
-    rating: Optional[int] = None    # 1-5 user rating, if available
+    rating: int | None = None    # 1-5 user rating, if available
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +166,7 @@ class RecipeSafetyResult:
     recipe_name: str
     verdict: SafetyVerdict
     issues: list[SafetyIssue] = field(default_factory=list)
-    recipe: Optional[Recipe] = None
+    recipe: Recipe | None = None
 
     @property
     def is_safe(self) -> bool:

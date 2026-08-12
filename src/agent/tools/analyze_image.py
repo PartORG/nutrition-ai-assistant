@@ -7,14 +7,14 @@ the recommendation pipeline.
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 
 from pydantic import BaseModel, Field
 
+from agent.tools.base import BaseTool, ToolResult
 from application.context import SessionContext
 from application.services.image_analysis import ImageAnalysisService
-from agent.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 

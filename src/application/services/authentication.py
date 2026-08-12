@@ -8,16 +8,16 @@ and coordinating between UserRepository and AuthenticationRepository.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt as _bcrypt
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 
-from domain.entities import User, Authentication
-from domain.ports import UserRepository, AuthenticationRepository
+from application.dto import AuthToken, LoginRequest, RegisterRequest
+from domain.entities import Authentication, User
 from domain.exceptions import AuthenticationError, DuplicateLoginError
-from application.dto import RegisterRequest, LoginRequest, AuthToken
+from domain.ports import AuthenticationRepository, UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class AuthenticationService:
                 raise AuthenticationError("Invalid token payload.")
             return payload
         except JWTError as exc:
-            raise AuthenticationError(f"Token verification failed: {exc}")
+            raise AuthenticationError(f"Token verification failed: {exc}") from exc
 
     async def refresh_token(self, token: str) -> AuthToken:
         """Issue a fresh token from an existing one (even if expired).
@@ -113,7 +113,7 @@ class AuthenticationService:
                 options={"verify_exp": False},
             )
         except JWTError as exc:
-            raise AuthenticationError(f"Token refresh failed: {exc}")
+            raise AuthenticationError(f"Token refresh failed: {exc}") from exc
 
         user_id = payload.get("user_id")
         if not user_id:
@@ -128,7 +128,7 @@ class AuthenticationService:
         return self._create_token(user_id, role)
 
     def _create_token(self, user_id: int, role: str) -> AuthToken:
-        expire = datetime.now(timezone.utc) + timedelta(hours=self._jwt_expiry_hours)
+        expire = datetime.now(UTC) + timedelta(hours=self._jwt_expiry_hours)
         payload = {
             "user_id": user_id,
             "role": role,

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
 
 from domain.entities import Authentication
 from infrastructure.persistence.connection import AsyncSQLiteConnection
@@ -34,7 +33,7 @@ class SQLiteAuthenticationRepository:
             )
             return cursor.lastrowid
 
-    async def get_by_login(self, login: str) -> Optional[Authentication]:
+    async def get_by_login(self, login: str) -> Authentication | None:
         async with self._conn.acquire() as conn:
             rows = await conn.execute_fetchall(
                 """SELECT * FROM authentication
@@ -43,7 +42,7 @@ class SQLiteAuthenticationRepository:
             )
             return self._row_to_entity(rows[0]) if rows else None
 
-    async def get_by_user_id(self, user_id: int) -> Optional[Authentication]:
+    async def get_by_user_id(self, user_id: int) -> Authentication | None:
         async with self._conn.acquire() as conn:
             rows = await conn.execute_fetchall(
                 """SELECT * FROM authentication

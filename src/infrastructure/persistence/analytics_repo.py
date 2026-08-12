@@ -8,6 +8,7 @@ aggregations, not domain operations). Called directly from the factory.
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 from infrastructure.persistence.connection import AsyncSQLiteConnection
 
@@ -235,8 +236,8 @@ class SQLiteAnalyticsRepository:
         self, user_id: int, recipe_id: int, rating: int
     ) -> bool:
         """Set the star rating for a saved recipe. Returns True if a row was updated."""
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         async with self._conn.acquire() as conn:
             cursor = await conn.execute(
                 """UPDATE recipe_history

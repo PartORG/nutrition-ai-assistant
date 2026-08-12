@@ -10,10 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from factory import ServiceFactory
 from application.context import SessionContext
+from factory import ServiceFactory
 
 # Module-level reference set by app lifespan
 _factory: ServiceFactory | None = None
@@ -50,12 +50,12 @@ async def get_current_user(
     auth_service = factory.create_authentication_service()
     try:
         payload = auth_service.verify_token(credentials.credentials)
-    except Exception:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from exc
     return CurrentUser(
         user_id=payload["user_id"],
         role=payload.get("role", "user"),

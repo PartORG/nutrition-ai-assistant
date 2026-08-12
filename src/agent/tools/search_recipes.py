@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from agent.tools.base import BaseTool, ToolResult
 from application.context import SessionContext
 from application.services.recommendation import RecommendationService
-from agent.tools.base import BaseTool, ToolResult
 
 _MEDICAL_DISCLAIMER = (
     "\n\n> ⚠️ **Medical disclaimer:** These are general nutritional recommendations "

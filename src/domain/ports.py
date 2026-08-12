@@ -11,26 +11,25 @@ implements the methods satisfies the port without explicit inheritance.
 
 from __future__ import annotations
 
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-from domain.models import (
-    UserIntent,
-    NutritionConstraints,
-    SafetyCheckResult,
-    DetectedIngredients,
-    Recipe,
-)
 from domain.entities import (
-    User,
     Authentication,
-    MedicalAdvice,
-    RecipeHistory,
-    NutritionHistory,
-    UserProfileHistory,
-    Conversation,
     ChatMessage,
+    Conversation,
+    MedicalAdvice,
+    NutritionHistory,
+    RecipeHistory,
+    User,
+    UserProfileHistory,
 )
-
+from domain.models import (
+    DetectedIngredients,
+    NutritionConstraints,
+    Recipe,
+    SafetyCheckResult,
+    UserIntent,
+)
 
 # ---------------------------------------------------------------------------
 # AI Component Ports
@@ -140,7 +139,7 @@ class ConversationRepository(Protocol):
     async def update_last_message(self, conversation_id: str) -> None: ...
     async def update_title(self, conversation_id: str, title: str) -> None: ...
     async def update_recipe_cache(self, conversation_id: str, cache_json: str) -> None: ...
-    async def get_recipe_cache(self, conversation_id: str) -> Optional[str]: ...
+    async def get_recipe_cache(self, conversation_id: str) -> str | None: ...
     async def soft_delete(self, conversation_id: str) -> None: ...
     async def delete_old_for_user(self, user_id: int, cutoff_iso: str) -> int: ...
 

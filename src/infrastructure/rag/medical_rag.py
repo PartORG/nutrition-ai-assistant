@@ -14,10 +14,10 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any
 
-from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from domain.models import NutritionConstraints
@@ -61,7 +61,7 @@ RULES:
 
     def __init__(
         self,
-        folder_paths: List[str],
+        folder_paths: list[str],
         vectorstore_path: str,
         model_name: str = "llama3.2",
         embedding_model: str = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1",
@@ -70,8 +70,8 @@ RULES:
         chunk_overlap: int = 50,
         ollama_base_url: str = "http://localhost:11434/",
         llm_provider: str = "ollama",
-        openai_api_key: Optional[str] = None,
-        groq_api_key: Optional[str] = None,
+        openai_api_key: str | None = None,
+        groq_api_key: str | None = None,
         use_hybrid: bool = False,
         reranker=None,
         fetch_k: int = 30,
@@ -106,7 +106,7 @@ RULES:
     # BaseRAG implementations
     # ================================================================
 
-    def _ingest_documents(self) -> List[Document]:
+    def _ingest_documents(self) -> list[Document]:
         documents = []
         logger.info("Starting PDF ingestion from %d folder(s)", len(self.folder_paths))
 
@@ -130,7 +130,7 @@ RULES:
         logger.info("Total documents loaded: %d", len(documents))
         return self._chunk_documents(documents)
 
-    def _ingest_single_file(self, file_path: str) -> List[Document]:
+    def _ingest_single_file(self, file_path: str) -> list[Document]:
         pdf_path = Path(file_path)
         if not pdf_path.exists():
             logger.warning("File does not exist: %s", file_path)
@@ -184,7 +184,7 @@ RULES:
     # Private helpers
     # ================================================================
 
-    def _chunk_documents(self, documents: List[Document]) -> List[Document]:
+    def _chunk_documents(self, documents: list[Document]) -> list[Document]:
         if not documents:
             return documents
         text_splitter = RecursiveCharacterTextSplitter(

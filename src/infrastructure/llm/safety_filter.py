@@ -16,24 +16,22 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any
 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
-from infrastructure.llm.llm_builder import build_llm
-
+from domain.exceptions import SafetyCheckError
 from domain.models import (
-    UserIntent,
     NutritionConstraints,
     NutritionValues,
     Recipe,
-    SafetyVerdict,
-    SafetyIssue,
     RecipeSafetyResult,
     SafetyCheckResult,
+    SafetyIssue,
+    SafetyVerdict,
+    UserIntent,
 )
-from domain.exceptions import SafetyCheckError
+from infrastructure.llm.llm_builder import build_llm
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
 
 from domain.entities import User
 from infrastructure.persistence.connection import AsyncSQLiteConnection
@@ -22,7 +21,7 @@ class SQLiteUserRepository:
     def __init__(self, connection: AsyncSQLiteConnection):
         self._conn = connection
 
-    async def get_by_id(self, user_id: int) -> Optional[User]:
+    async def get_by_id(self, user_id: int) -> User | None:
         async with self._conn.acquire() as conn:
             row = await conn.execute_fetchall(
                 "SELECT * FROM users WHERE id = ? AND deleted_at = ''",
@@ -32,7 +31,7 @@ class SQLiteUserRepository:
                 return None
             return self._row_to_user(row[0])
 
-    async def get_by_name(self, name: str, surname: str) -> Optional[User]:
+    async def get_by_name(self, name: str, surname: str) -> User | None:
         async with self._conn.acquire() as conn:
             rows = await conn.execute_fetchall(
                 "SELECT * FROM users WHERE name = ? AND surname = ? ORDER BY updated_at DESC LIMIT 1",

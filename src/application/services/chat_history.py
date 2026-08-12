@@ -8,11 +8,10 @@ Used by AgentExecutor to persist conversations to DB.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-from domain.entities import Conversation, ChatMessage
-from domain.ports import ConversationRepository, ChatMessageRepository
 from application.context import SessionContext
+from domain.entities import ChatMessage, Conversation
+from domain.ports import ChatMessageRepository, ConversationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +109,7 @@ class ChatHistoryService:
                 "Failed to save recipe cache for conversation %s", ctx.conversation_id
             )
 
-    async def load_recipe_cache(self, conversation_id: str) -> Optional[str]:
+    async def load_recipe_cache(self, conversation_id: str) -> str | None:
         """Return the cached recipe list JSON for a conversation, or None."""
         try:
             return await self._conversation_repo.get_recipe_cache(conversation_id)

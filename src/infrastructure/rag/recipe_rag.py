@@ -13,15 +13,15 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
-import re
 import logging
+import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set, Union
+from typing import Any
 
 import pandas as pd
-from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
+from langchain_core.documents import Document
 
 from infrastructure.rag.base_rag import BaseRAG
 from infrastructure.rag.smart_retriever import SmartRetriever
@@ -184,8 +184,8 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         k: int = 14,
         ollama_base_url: str = "http://localhost:11434/",
         llm_provider: str = "ollama",
-        openai_api_key: Optional[str] = None,
-        groq_api_key: Optional[str] = None,
+        openai_api_key: str | None = None,
+        groq_api_key: str | None = None,
         use_hybrid: bool = False,
         reranker=None,
         embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
@@ -213,9 +213,9 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         self.data_folder = Path(data_folder)
         self.k = k
 
-        self.vectorstore_recipes: Optional[FAISS] = None
-        self.vectorstore_nutrition: Optional[FAISS] = None
-        self.smart_retriever: Optional[SmartRetriever] = None
+        self.vectorstore_recipes: FAISS | None = None
+        self.vectorstore_nutrition: FAISS | None = None
+        self.smart_retriever: SmartRetriever | None = None
 
     # ================================================================
     # RecipeRAGPort implementation
@@ -228,7 +228,6 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         We parse that JSON directly into Recipe domain objects —
         no second LLM re-parsing step needed.
         """
-        from domain.models import Recipe, NutritionValues
         loop = asyncio.get_event_loop()
         raw_json = await loop.run_in_executor(None, super().ask, query)
         return self._parse_json_to_recipes(raw_json)
@@ -236,8 +235,9 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
     @staticmethod
     def _parse_json_to_recipes(raw_json: str) -> list:
         """Parse the LLM JSON output into a list of Recipe domain objects."""
-        from domain.models import Recipe, NutritionValues
         import re
+
+        from domain.models import NutritionValues, Recipe
 
         # Extract JSON object (guard against any stray text)
         match = re.search(r'\{.*\}', raw_json, re.DOTALL)
@@ -307,7 +307,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
     # BaseRAG implementations
     # ================================================================
 
-    def _ingest_documents(self) -> List[Document]:
+    def _ingest_documents(self) -> list[Document]:
         csv_sources = [
             ("cleaned_recipes.csv", self._load_recipes_csv, "recipes"),
             ("cleaned_recipes_data_sample.csv", self._load_recipes_data_sample_csv, "recipes"),
@@ -316,8 +316,8 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         ]
 
         threshold_bytes = self.LARGE_FILE_THRESHOLD_MB * 1024 * 1024
-        all_loaded: Dict[str, List[Document]] = {}
-        large_files_ingested: List[str] = []
+        all_loaded: dict[str, list[Document]] = {}
+        large_files_ingested: list[str] = []
 
         for filename, loader_fn, collection in csv_sources:
             csv_path = self.data_folder / filename
@@ -355,7 +355,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         )
         return all_docs
 
-    def _ingest_single_file(self, file_path: str) -> List[Document]:
+    def _ingest_single_file(self, file_path: str) -> list[Document]:
         path = Path(file_path)
         if not path.exists():
             logger.warning("File does not exist: %s", file_path)
@@ -407,7 +407,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         self.vectorstore_nutrition = None
         logger.info("Cleared recipe/nutrition indices for a clean rebuild")
 
-    def _build_vectorstore(self, documents: List[Document]) -> None:
+    def _build_vectorstore(self, documents: list[Document]) -> None:
         recipe_docs = [d for d in documents if d.metadata.get("_collection") == "recipes"]
         nutrition_docs = [d for d in documents if d.metadata.get("_collection") == "nutrition"]
 
@@ -551,14 +551,14 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         name = Path(csv_path).stem
         return self.vectorstore_path / f"{name}_batch_meta.json"
 
-    def _get_batch_meta(self, csv_path: str) -> Dict[str, Any]:
+    def _get_batch_meta(self, csv_path: str) -> dict[str, Any]:
         meta_path = self._batch_meta_path(csv_path)
         if not meta_path.exists():
             return {}
-        with open(meta_path, "r", encoding="utf-8") as f:
+        with open(meta_path, encoding="utf-8") as f:
             return json.load(f)
 
-    def _save_batch_meta(self, csv_path: str, meta: Dict[str, Any]) -> None:
+    def _save_batch_meta(self, csv_path: str, meta: dict[str, Any]) -> None:
         meta_path = self._batch_meta_path(csv_path)
         meta_path.parent.mkdir(parents=True, exist_ok=True)
         with open(meta_path, "w", encoding="utf-8") as f:
@@ -569,7 +569,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
     # ================================================================
 
     @staticmethod
-    def _detect_allergens(text: str) -> List[str]:
+    def _detect_allergens(text: str) -> list[str]:
         text_lower = text.lower()
         allergens = []
         if any(w in text_lower for w in ["milk", "cheese", "butter", "cream", "yogurt"]):
@@ -583,7 +583,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         return allergens
 
     @staticmethod
-    def _detect_diet_tags(text: str) -> List[str]:
+    def _detect_diet_tags(text: str) -> list[str]:
         text_lower = text.lower()
         tags = []
         if "vegan" in text_lower:
@@ -593,14 +593,14 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             tags.append("vegetarian")
         return tags
 
-    def _load_recipes_csv(self, csv_path_or_df) -> List[Document]:
+    def _load_recipes_csv(self, csv_path_or_df) -> list[Document]:
         if isinstance(csv_path_or_df, pd.DataFrame):
             df = csv_path_or_df
         else:
             df = pd.read_csv(csv_path_or_df)
 
         documents = []
-        for idx, row in df.iterrows():
+        for _idx, row in df.iterrows():
             if pd.isna(row["recipe_name"]):
                 continue
 
@@ -618,7 +618,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
                 text_parts.append(f"\nNutrition Facts: {row['nutrition']}")
 
             full_text = "".join(text_parts)
-            metadata: Dict[str, Any] = {
+            metadata: dict[str, Any] = {
                 "doc_type": "recipe",
                 "source_file": "cleaned_recipes",
                 "recipe_name": row["recipe_name"],
@@ -645,14 +645,14 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         logger.debug("Loaded %d documents from recipes CSV", len(documents))
         return documents
 
-    def _load_recipes_data_sample_csv(self, csv_path_or_df) -> List[Document]:
+    def _load_recipes_data_sample_csv(self, csv_path_or_df) -> list[Document]:
         if isinstance(csv_path_or_df, pd.DataFrame):
             df = csv_path_or_df
         else:
             df = pd.read_csv(csv_path_or_df)
 
         documents = []
-        for idx, row in df.iterrows():
+        for _idx, row in df.iterrows():
             if pd.isna(row["title"]):
                 continue
             try:
@@ -693,14 +693,14 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         logger.debug("Loaded %d documents from recipes_data_sample CSV", len(documents))
         return documents
 
-    def _load_healthy_meals_csv(self, csv_path_or_df) -> List[Document]:
+    def _load_healthy_meals_csv(self, csv_path_or_df) -> list[Document]:
         if isinstance(csv_path_or_df, pd.DataFrame):
             df = csv_path_or_df
         else:
             df = pd.read_csv(csv_path_or_df)
 
         documents = []
-        for idx, row in df.iterrows():
+        for _idx, row in df.iterrows():
             if pd.isna(row["meal_name"]):
                 continue
 
@@ -746,7 +746,7 @@ Preparation: {row['cooking_method']} (Prep: {row['prep_time_min']}min, Cook: {ro
         logger.debug("Loaded %d documents from healthy_meals CSV", len(documents))
         return documents
 
-    def _load_nutrition_csv(self, csv_path_or_df) -> List[Document]:
+    def _load_nutrition_csv(self, csv_path_or_df) -> list[Document]:
         if isinstance(csv_path_or_df, pd.DataFrame):
             df = csv_path_or_df
         else:
@@ -762,7 +762,7 @@ Preparation: {row['cooking_method']} (Prep: {row['prep_time_min']}min, Cook: {ro
             except Exception:
                 return None
 
-        for idx, row in df.iterrows():
+        for _idx, row in df.iterrows():
             if pd.isna(row["name"]):
                 continue
 
@@ -814,7 +814,7 @@ Cholesterol: {row['cholesterol']} | Saturated Fat: {row['saturated_fat']}
     # Domain-specific public methods
     # ================================================================
 
-    def get_retrieved_docs(self, query: str) -> List[Document]:
+    def get_retrieved_docs(self, query: str) -> list[Document]:
         if not self.smart_retriever:
             return []
         return self.smart_retriever.invoke(query)
@@ -824,7 +824,7 @@ Cholesterol: {row['cholesterol']} | Saturated Fat: {row['saturated_fat']}
         self._setup_retriever()
         self._build_chain()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         stats = super().get_stats()
         if self.vectorstore_recipes and self.vectorstore_nutrition:
             stats["vectorstores"] = {
@@ -840,7 +840,7 @@ Cholesterol: {row['cholesterol']} | Saturated Fat: {row['saturated_fat']}
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _to_float(value) -> Optional[float]:
+def _to_float(value) -> float | None:
     """Safely coerce a JSON value to float, returning None on failure."""
     if value is None:
         return None

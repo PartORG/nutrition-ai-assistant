@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from domain.models import UserIntent
-from domain.entities import UserProfileHistory, MedicalAdvice
-from domain.ports import ProfileRepository, MedicalRepository
 from application.context import SessionContext
+from domain.entities import MedicalAdvice, UserProfileHistory
+from domain.models import UserIntent
+from domain.ports import MedicalRepository, ProfileRepository
 
 logger = logging.getLogger(__name__)
 

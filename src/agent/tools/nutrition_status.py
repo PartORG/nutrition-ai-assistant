@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from domain.ports import NutritionRepository, MedicalRepository
-from application.context import SessionContext
 from agent.tools.base import BaseTool, ToolResult
+from application.context import SessionContext
+from domain.ports import MedicalRepository, NutritionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +142,7 @@ def _format_status(
     for attr, constraint_key, label, unit in _NUTRIENT_LABELS:
         consumed = totals.get(attr, 0.0)
         rule = limits.get(constraint_key) or {}
-        max_val: Optional[float] = rule.get("max")
+        max_val: float | None = rule.get("max")
 
         # Skip rows that are zero and have no configured limit
         if consumed <= 0 and max_val is None:

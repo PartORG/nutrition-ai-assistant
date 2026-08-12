@@ -13,7 +13,6 @@ similarity search, preserving the original behaviour.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -37,8 +36,8 @@ class SmartRetriever(Runnable):
         vectorstore_nutrition,
         k: int = 14,
         use_hybrid: bool = False,
-        reranker: Optional[Reranker] = None,
-        fetch_k: Optional[int] = None,
+        reranker: Reranker | None = None,
+        fetch_k: int | None = None,
     ):
         self.vectorstore_recipes = vectorstore_recipes
         self.vectorstore_nutrition = vectorstore_nutrition
@@ -52,7 +51,7 @@ class SmartRetriever(Runnable):
 
     def invoke(
         self, input: dict | str, config: RunnableConfig = None,  # noqa: A002
-    ) -> List[Document]:
+    ) -> list[Document]:
         query = input.get("input", "") if isinstance(input, dict) else input
         return self._smart_retrieve(query)
 
@@ -65,10 +64,10 @@ class SmartRetriever(Runnable):
             self._bm25_built.add(name)
         return self._bm25.get(name)
 
-    def _retrieve_store(self, name: str, vectorstore, query: str, fetch_k: int) -> List[Document]:
+    def _retrieve_store(self, name: str, vectorstore, query: str, fetch_k: int) -> list[Document]:
         return hybrid_search(vectorstore, query, fetch_k, self._bm25_for(name, vectorstore))
 
-    def _smart_retrieve(self, query: str) -> List[Document]:
+    def _smart_retrieve(self, query: str) -> list[Document]:
         query_type = self._determine_query_type(query)
 
         if query_type == "recipes":

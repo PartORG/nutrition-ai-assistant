@@ -7,15 +7,14 @@ These are the structured results that services return to callers
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from domain.models import (
-    UserIntent,
-    NutritionConstraints,
-    SafetyCheckResult,
-    Recipe,
     DetectedIngredients,
+    NutritionConstraints,
+    Recipe,
+    SafetyCheckResult,
+    UserIntent,
 )
 
 
@@ -71,4 +70,4 @@ class AuthToken:
 class ImageAnalysisResult:
     """Result from CNN ingredient detection, optionally with recommendations."""
     detected: DetectedIngredients
-    recommendation: Optional[RecommendationResult] = None
+    recommendation: RecommendationResult | None = None

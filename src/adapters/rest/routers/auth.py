@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from factory import ServiceFactory
-from domain.exceptions import AuthenticationError, DuplicateLoginError
-from application.dto import RegisterRequest, LoginRequest
 from adapters.rest.dependencies import get_factory
-from adapters.rest.schemas import RegisterBody, LoginBody, TokenResponse, RefreshBody
+from adapters.rest.schemas import LoginBody, RefreshBody, RegisterBody, TokenResponse
+from application.dto import LoginRequest, RegisterRequest
+from domain.exceptions import AuthenticationError, DuplicateLoginError
+from factory import ServiceFactory
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -32,7 +32,7 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
-        )
+        ) from exc
 
     # Persist health conditions immediately so load_user_context() picks them
     # up on first login without requiring a prior chat interaction.
@@ -63,7 +63,7 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
-        )
+        ) from exc
     return TokenResponse(
         access_token=token.access_token,
         token_type=token.token_type,
@@ -89,7 +89,7 @@ async def refresh(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
-        )
+        ) from exc
     return TokenResponse(
         access_token=token.access_token,
         token_type=token.token_type,

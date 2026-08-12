@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import logging
 
-from domain.models import Recipe, NutritionValues
-from domain.entities import RecipeHistory, NutritionHistory
-from domain.ports import RecipeRepository, NutritionRepository
 from application.context import SessionContext
+from domain.entities import NutritionHistory, RecipeHistory
+from domain.models import Recipe
+from domain.ports import NutritionRepository, RecipeRepository
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
 
 from domain.entities import MedicalAdvice
 from infrastructure.persistence.connection import AsyncSQLiteConnection
