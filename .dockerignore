@@ -37,6 +37,11 @@ vector_databases/
 # Flutter app — not needed in API container
 app/
 
+# Training pipeline and its artifacts — serving loads best.pt, never trains
+training/
+datasets/
+runs/
+
 # Experimental scripts — not deployed
 new_scripts/
 

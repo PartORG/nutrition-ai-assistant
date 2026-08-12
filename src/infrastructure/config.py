@@ -66,9 +66,16 @@ class Settings:
     # Database
     db_path: str = "users.db"
 
-    # CNN / Ingredient Detector (LLaVA via Ollama)
+    # CNN / Ingredient Detector.
+    #   detector_backend = "llava" (zero-shot via Ollama) or "yolo" (local weights)
+    # yolo_weights accepts a stock checkpoint name (auto-downloaded) or a path
+    # to a fine-tuned best.pt — see training/README.md.
+    detector_backend: str = "llava"
     cnn_model_path: str = ""
     cnn_class_labels_path: str = ""
+    yolo_weights: str = "yolo11n.pt"
+    yolo_confidence: float = 0.25
+    yolo_device: str = "cpu"
 
     # Upload directory for images.
     # In Docker: mount ./uploads → /app/uploads.
@@ -125,8 +132,12 @@ class Settings:
 
             agent_max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "5")),
             db_path=os.getenv("DB_PATH", "users.db"),
+            detector_backend=os.getenv("DETECTOR_BACKEND", "llava").strip().lower(),
             cnn_model_path=os.getenv("CNN_MODEL_PATH", ""),
             cnn_class_labels_path=os.getenv("CNN_CLASS_LABELS_PATH", ""),
+            yolo_weights=os.getenv("YOLO_WEIGHTS", "yolo11n.pt"),
+            yolo_confidence=float(os.getenv("YOLO_CONFIDENCE", "0.25")),
+            yolo_device=os.getenv("YOLO_DEVICE", "cpu"),
             upload_dir=os.getenv("UPLOAD_DIR", "./uploads"),
             jwt_secret=os.getenv("JWT_SECRET", "change-me-in-production"),
             jwt_expiry_hours=int(os.getenv("JWT_EXPIRY_HOURS", "24")),

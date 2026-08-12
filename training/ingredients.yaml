@@ -1,0 +1,47 @@
+# Dataset config for fine-tuning YOLO on food ingredients.
+#
+# `path` is resolved relative to Ultralytics' datasets root, so an absolute
+# path is the least surprising thing here. Point it at your dataset.
+#
+# Expected layout:
+#   datasets/ingredients/
+#     images/train/*.jpg    labels/train/*.txt
+#     images/val/*.jpg      labels/val/*.txt
+#
+# Each label file holds one line per box:  <class_index> <cx> <cy> <w> <h>
+# with all four coordinates normalised to 0-1. See training/README.md.
+
+path: ../datasets/ingredients
+train: images/train
+val: images/val
+
+# Class indices must match the order below — index 0 is the first entry.
+# This is a starter vocabulary covering common recipe ingredients. Edit it to
+# match your labelled data; the app reads class names from the trained model,
+# so no code change is needed when this list changes.
+names:
+  0: chicken
+  1: beef
+  2: pork
+  3: fish
+  4: egg
+  5: milk
+  6: cheese
+  7: butter
+  8: rice
+  9: pasta
+  10: bread
+  11: potato
+  12: tomato
+  13: onion
+  14: garlic
+  15: carrot
+  16: broccoli
+  17: spinach
+  18: bell pepper
+  19: mushroom
+  20: apple
+  21: banana
+  22: lemon
+  23: olive oil
+  24: rosemary

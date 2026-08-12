@@ -342,7 +342,27 @@ class ServiceFactory:
         )
 
     def _build_image_detector(self):
-        """Build the LLaVA ingredient detector (called once during init)."""
+        """Build the configured ingredient detector (called once during init).
+
+        Both backends satisfy IngredientDetectorPort, so nothing downstream
+        cares which one is running.
+        """
+        if self._config.detector_backend == "yolo":
+            from infrastructure.cnn.yolo_detector import YOLOIngredientDetector
+
+            detector = YOLOIngredientDetector(
+                weights=self._config.yolo_weights,
+                confidence_threshold=self._config.yolo_confidence,
+                device=self._config.yolo_device,
+            )
+            logger.info(
+                "Image detector: YOLO ('%s', conf>=%.2f, device=%s)",
+                self._config.yolo_weights,
+                self._config.yolo_confidence,
+                self._config.yolo_device,
+            )
+            return detector
+
         llava_model = self._config.cnn_model_path or "llava"
         detector = LLaVAIngredientDetector(
             ollama_base_url=self._config.ollama_base_url,

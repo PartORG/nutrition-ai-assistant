@@ -45,6 +45,15 @@ venv/
 .cache/
 .ipynb_checkpoints/
 
+# ── ML artifacts ──
+# Model weights and training output are distributed via GitHub Releases,
+# not git. See training/README.md.
+*.pt
+*.pth
+*.onnx
+runs/
+datasets/
+
 # ── Project data ──
 *.db
 *.db-journal

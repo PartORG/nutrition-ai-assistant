@@ -30,22 +30,22 @@ dependencies = [
     "langchain-ollama>=1.1,<2",
     "langchain-groq>=1.1,<2",
     "langchain-openai>=1.3,<2",
-    "langchainhub>=0.1.21",
     # ── LLM / Embeddings ──
     "ollama>=0.3.0",
     "transformers>=4.40.0",
     "sentence-transformers==3.3.1",
     # torch>=2.6 required by transformers' torch.load CVE guard (CVE-2025-32434);
     # torchvision 0.21.0 is the matching pair for torch 2.6.0.
+    # Both resolve from the CPU wheel index — see [tool.uv.sources] below.
     "torch==2.6.0",
     "torchvision==0.21.0",
+    # ── Vision (ingredient detection) ──
+    "ultralytics>=8.3.0",
     # ── Vector search ──
     "faiss-cpu==1.9.0.post1",
     "rank-bm25==0.2.2",
     # ── Document ingestion ──
     "pypdf==5.1.0",
-    "unstructured==0.16.11",
-    "openpyxl==3.1.5",
     # ── HTTP ──
     "requests>=2.32.5",
     # ── Data ──
@@ -69,6 +69,31 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+# Only needed to retrain the ingredient detector, never to serve it.
+# Install with:  uv sync --group training
+training = [
+    "pyyaml>=6.0",
+]
+
+# ---------------------------------------------------------------------------
+# Torch comes from PyPI as a CUDA build on linux/x86_64, which drags in ~3.6 GB
+# of nvidia-*-cu12 + triton that the API never executes: the LLM runs in the
+# Ollama container, faiss is CPU-only, and YOLO inference on a handful of
+# uploaded images does not need a GPU. Pin the CPU wheels instead.
+#
+# To train on a GPU, install torch from the CUDA index in that environment
+# only — training is not part of the deployed image:
+#   uv pip install torch==2.6.0 torchvision==0.21.0 \
+#       --index-url https://download.pytorch.org/whl/cu124
+# ---------------------------------------------------------------------------
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
 
 [build-system]
 requires = ["setuptools>=68"]

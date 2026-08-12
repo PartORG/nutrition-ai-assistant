@@ -3,9 +3,14 @@ FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 WORKDIR /app
 
-# System dependencies required to build some Python wheels
+# System dependencies. build-essential builds some Python wheels; libgl1 and
+# libglib2.0-0 are runtime deps of opencv-python, which ultralytics (YOLO)
+# pulls in — without them `import cv2` fails with "libGL.so.1: cannot open
+# shared object file" the first time a photo is uploaded.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV UV_COMPILE_BYTECODE=1 \
