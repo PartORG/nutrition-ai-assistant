@@ -2,7 +2,7 @@
 Run the Nutrition AI Assistant REST API.
 
 Usage:
-    python run_api.py
+    uv run python run_api.py     (or: uv run nutriai-api)
 
 Environment variables (all optional):
     JWT_SECRET          Secret key for signing JWT tokens (change in production!)
@@ -17,18 +17,9 @@ Environment variables (all optional):
     OLLAMA_BASE_URL     Ollama server URL (default: http://localhost:11434/)
 """
 
-import sys
-from pathlib import Path
-
-# Ensure src/ is importable
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-import uvicorn
+# The package is installed (uv sync), so `adapters.rest.app` resolves
+# without any sys.path manipulation.
+from adapters.rest.app import main
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "adapters.rest.app:app",
-        host="0.0.0.0",
-        port=9000,
-        reload=True,
-    )
+    main()

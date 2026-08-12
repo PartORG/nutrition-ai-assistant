@@ -22,33 +22,8 @@ services:
     #           capabilities: [gpu]
     # restart: unless-stopped
 
-  # ── 2. YOLO Detector ──────────────────────────────────────────────────────
-  # Isolated Python environment with ultralytics, opencv-python-headless, torch.
-  # Place model weights in services/yolo_detector/models/ before building:
-  #   - food101_resnet18_best.pth  (your trained model)
-  #   - yolov8n.pt is auto-downloaded by ultralytics on first run
-  yolo-detector:
-    build:
-      context: ./services/yolo_detector
-      dockerfile: Dockerfile
-    container_name: nutriai-yolo
-    ports:
-      - "8001:8001"
-    volumes:
-      # Model weights — read-only mount from local models/ folder
-      - ./services/yolo_detector/models:/app/models:ro
-      # Shared upload directory — the main API saves images here and passes
-      # the path to YOLO so it can read the file directly (no base64 overhead)
-      - ./uploads:/app/uploads
-    environment:
-      - FOOD_MODEL_PATH=/app/models/food101_resnet18_best.pth
-      - YOLO_MODEL_PATH=yolov8n.pt
-      - CONF_THRESHOLD=0.3
-      - FOOD_CONF_THRESHOLD=0.4
-    restart: unless-stopped
-
-  # ── 3. Main API ───────────────────────────────────────────────────────────
-  # FastAPI application — src/ package. Calls ollama and yolo-detector.
+  # ── 2. Main API ───────────────────────────────────────────────────────────
+  # FastAPI application — src/ package. Calls ollama for LLM + LLaVA vision.
   api:
     build:
       context: .
@@ -61,12 +36,9 @@ services:
     environment:
       # Service URLs — use container names (Docker internal DNS)
       - OLLAMA_BASE_URL=http://ollama:11434/
-      - YOLO_SERVICE_URL=http://yolo-detector:8001
-      # Detector: tries YOLO first, falls back to LLaVA if unavailable / empty
-      - CNN_DETECTOR_TYPE=yolo_with_fallback
       # Point DB to the persistent volume
       - DB_PATH=/app/db/users.db
-      # Shared upload directory (same path in both api and yolo-detector containers)
+      # Upload directory for images
       - UPLOAD_DIR=/app/uploads
     volumes:
       # Data directories (read-only)
@@ -75,12 +47,10 @@ services:
       - ./vector_databases:/app/vector_databases:ro
       # Persistent database — bind mount so DBeaver can open ./db/users.db directly
       - ./db:/app/db
-      # Shared upload directory — images uploaded via Flutter are saved here and
-      # the path is forwarded to the YOLO service which mounts the same volume
+      # Upload directory — images uploaded via Flutter are saved here
       - ./uploads:/app/uploads
     depends_on:
       - ollama
-      - yolo-detector
     restart: unless-stopped
 
 volumes:

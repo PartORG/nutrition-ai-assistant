@@ -148,7 +148,7 @@ src/
 │
 ├── infrastructure/  🔧 "The actual machines and tools"
 │                    The real database code. The real AI model connections.
-│                    The YOLO computer vision service. The medical PDF reader.
+│                    The LLaVA computer vision detector. The medical PDF reader.
 │                    If you want to swap SQLite for PostgreSQL, or Ollama for ChatGPT,
 │                    you change files ONLY in this folder.
 │
@@ -324,7 +324,7 @@ This is an AI-powered nutrition assistant. Users chat with it (via a Flutter mob
 - Finds relevant recipes (Recipe RAG from CSV datasets)
 - Filters recipes for safety against medical constraints (Safety Filter with LLM)
 - Saves chosen recipes and tracks daily nutrition (SQLite database)
-- Analyzes food photos to identify ingredients (YOLO + LLaVA vision models)
+- Analyzes food photos to identify ingredients (LLaVA vision model)
 
 ```
 Flutter App
@@ -336,12 +336,11 @@ FastAPI Server (src/)
     ├── WebSocket /ws/chat → Agent (LLM + Tools)
     │       ├── search_recipes → RAG pipeline
     │       ├── save_recipe → SQLite
-    │       ├── analyze_image → YOLO / LLaVA
+    │       ├── analyze_image → LLaVA
     │       ├── nutrition_status → SQLite
     │       └── ... more tools
     │
     ├── Ollama (local LLM: llama3.2, llava)
-    ├── YOLO Detector (separate Docker container)
     └── SQLite Database (users.db)
 ```
 
@@ -460,7 +459,7 @@ Hexagonal Architecture applies this USB logic to software:
    │  • Flutter app      │                    │  • SQLite database      │
    │  • REST API         │                    │  • Ollama / Groq / GPT  │
    │  • WebSocket chat   │                    │  • FAISS vectorstore    │
-   │  • Tests            │                    │  • YOLO detector        │
+   │  • Tests            │                    │  • LLaVA detector       │
    └─────────────────────┘                    └─────────────────────────┘
 ```
 
@@ -526,7 +525,7 @@ Here is every Port/Adapter pair in this project:
 | `MedicalRAGPort` | `MedicalRAG` | Extract dietary rules from PDFs |
 | `RecipeRAGPort` | `RecipeNutritionRAG` | Find recipes from dataset |
 | `SafetyFilterPort` | `SafetyFilter` (alias: `OllamaSafetyFilter`) | Validate recipes against constraints |
-| `IngredientDetectorPort` | `YOLOServiceDetector` / `LLaVAIngredientDetector` / `FallbackIngredientDetector` | Detect food in photos |
+| `IngredientDetectorPort` | `LLaVAIngredientDetector` | Detect food in photos |
 
 Every row is a USB socket + USB device pair. Swap the right column without touching the left.
 
@@ -597,7 +596,7 @@ The name comes from Alistair Cockburn's 2005 paper where he drew the application
        [SQLite adapter]────────────────[Ollama adapter]
                      /             \
                     /               \
-              [YOLO adapter]    [FAISS adapter]
+              [LLaVA adapter]   [FAISS adapter]
 ```
 
 The shape is a hexagon simply because it has enough sides to fit several adapters on each side visually — not because there must be exactly six. In practice you can have any number of adapters. What matters is the idea: the core in the center, the adapters all around it, each one plugging in through a port.
@@ -661,12 +660,10 @@ src/
 │   │   ├── recipe_rag.py     ← Implements RecipeRAGPort — reads recipe CSVs
 │   │   └── smart_retriever.py← Routes queries to recipe vs nutrition vectorstore
 │   └── cnn/          ← Computer vision implementations
-│       ├── ingredient_detector.py  ← LLaVA (multimodal LLM) detector
-│       ├── yolo_service_detector.py← YOLO external service detector
-│       └── fallback_detector.py    ← Try YOLO, fall back to LLaVA
+│       └── ingredient_detector.py  ← LLaVA (multimodal LLM) detector
 │
 ├── agent/            ← Layer 4: The conversational AI brain
-│   ├── executor.py   ← Runs the LLM + tool-selection loop (LangChain agent)
+│   ├── executor.py   ← Runs the LLM + tool-selection loop (LangGraph agent)
 │   ├── memory.py     ← Per-session conversation history (not global)
 │   ├── prompt.py     ← System prompt builder (dynamically includes registered tools)
 │   └── tools/        ← Each tool is one capability the agent can invoke
@@ -1002,9 +999,7 @@ Three implementations of `IngredientDetectorPort`:
 
 | Class | Technology | When used |
 |---|---|---|
-| `LLaVAIngredientDetector` | LLaVA vision model via Ollama | Always available, slower |
-| `YOLOServiceDetector` | YOLO in separate Docker container | Fast, but container must be running |
-| `FallbackIngredientDetector` | Try YOLO, fall back to LLaVA | Default (best of both) |
+| `LLaVAIngredientDetector` | LLaVA vision model via Ollama | Extracts ingredients from food photos |
 
 ---
 
@@ -1012,7 +1007,7 @@ Three implementations of `IngredientDetectorPort`:
 
 **Files:** `src/agent/`
 
-The agent is the conversational interface. It wraps LangChain's `create_tool_calling_agent` with custom tools and per-session memory.
+The agent is the conversational interface. It uses LangGraph's `create_react_agent` with custom tools and per-session memory.
 
 #### `executor.py` — AgentExecutor
 
@@ -1084,10 +1079,10 @@ Every tool:
 
 The registry:
 1. Stores all tools by name
-2. Converts them to LangChain `StructuredTool` objects (needed for `create_tool_calling_agent`)
-3. Binds `SessionContext` to each tool via closure (so LangChain can call them without knowing about sessions)
+2. Converts them to async LangChain `StructuredTool` objects (for the LangGraph agent)
+3. Binds `SessionContext` to each tool via closure (so tools can be called without knowing about sessions)
 
-The LangChain executor runs tool calls synchronously inside a thread pool. The registry wrapper calls `asyncio.run(tool.execute(...))` to bridge back to async — this works because the thread pool thread has no running event loop.
+Tools are exposed as coroutines, so the LangGraph agent awaits them directly — no thread hop, no `asyncio.run`.
 
 ---
 
@@ -1256,10 +1251,9 @@ AnalyzeImageTool.execute(ctx, image_path="/uploads/fridge.jpg")
 ImageAnalysisService.analyze(ctx, image_path)
     │
     ├── detector.detect("/uploads/fridge.jpg")
-    │   ├── YOLOServiceDetector (http://yolo-detector:8001)
-    │   │   → POST /detect with image → ["chicken", "garlic", "lemon"]
-    │   └── On failure: LLaVAIngredientDetector
+    │   └── LLaVAIngredientDetector
     │       → base64 encode → Ollama LLaVA → parse ingredient list
+    │       → ["chicken", "garlic", "lemon"]
     │
     └── recommendation_service.get_recommendations(ctx, "ingredients: chicken, garlic, lemon")
         → full 5-step pipeline
@@ -1318,14 +1312,12 @@ Three containers work together:
 services:
   ollama:          # Local LLM inference (llama3.2, llava)
     port: 11434
-  yolo-detector:   # YOLO + ResNet food detection microservice
-    port: 8001
   api:             # FastAPI application (src/)
     port: 8000
-    depends_on: [ollama, yolo-detector]
+    depends_on: [ollama]
 ```
 
-The API container calls the other two by their container names (`ollama`, `yolo-detector`) which Docker's internal DNS resolves. The Flutter app talks only to the API container on port 8000.
+The API container calls Ollama by its container name (`ollama`) which Docker's internal DNS resolves. The Flutter app talks only to the API container on port 8000.
 
 ---
 
@@ -1666,7 +1658,7 @@ All LLM provider configuration flows through environment variables → `Settings
 | Medical RAG | `RAG_LLM_PROVIDER` + `RAG_LLM_MODEL` | Extract dietary constraints from PDFs |
 | Recipe RAG | `RAG_LLM_PROVIDER` + `RAG_LLM_MODEL` | Generate recipe recommendations |
 | Agent | `AGENT_LLM_PROVIDER` + `AGENT_LLM_MODEL` | Main conversational agent, tool routing |
-| Image Detection | `CNN_DETECTOR_TYPE` + `cnn_model_path` | YOLO or LLaVA for food photos |
+| Image Detection | `CNN_MODEL_PATH` | LLaVA model for food photos |
 
 ### Switch the Agent LLM
 
@@ -1747,8 +1739,7 @@ All configuration lives in environment variables, loaded by `src/infrastructure/
 | `GROQ_API_KEY` | — | Required when any provider is `groq` |
 | `OPENAI_API_KEY` | — | Required when any provider is `openai` |
 | `DB_PATH` | `users.db` | Path to SQLite database file |
-| `CNN_DETECTOR_TYPE` | `yolo_with_fallback` | `llava_only`, `yolo_only`, `yolo_with_fallback` |
-| `YOLO_SERVICE_URL` | `http://localhost:8001` | URL of the YOLO detector microservice |
+| `CNN_MODEL_PATH` | `llava` | LLaVA model name for image ingredient detection |
 | `JWT_SECRET` | `change-me-in-production` | **Change this in production!** |
 | `JWT_EXPIRY_HOURS` | `24` | JWT token lifetime |
 

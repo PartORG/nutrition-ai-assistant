@@ -40,12 +40,6 @@ app/
 # Experimental scripts — not deployed
 new_scripts/
 
-# Services have their own build context
-services/
-
-# Dev-only requirements (API container uses requirements.txt)
-requirements-dev.txt
-
 # Logs
 *.log
 

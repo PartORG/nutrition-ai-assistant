@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain.tools import StructuredTool
+from langchain_core.tools import StructuredTool
 
 from application.context import SessionContext
 from agent.tools.base import BaseTool, ToolResult
@@ -58,36 +58,27 @@ class ToolRegistry:
         return result.output
 
     def to_langchain_tools(self, ctx: SessionContext) -> list[StructuredTool]:
-        """Convert all registered tools to LangChain StructuredTools.
+        """Convert all registered tools to async LangChain StructuredTools.
 
-        Binds the SessionContext so LangChain's agent can call them.
+        Binds the SessionContext so the agent can call them. Tools are exposed
+        as coroutines, so the LangGraph agent awaits them directly — no thread
+        hop, no asyncio.run.
         """
         lc_tools = []
         for tool in self._tools.values():
             schema = tool.get_schema()
 
-            # Create a closure that captures both tool and ctx
-            def _make_func(t: BaseTool, context: SessionContext):
-                def func(**kwargs: Any) -> str:
-                    import asyncio
-                    # This function always runs inside a thread-pool worker
-                    # (via run_in_executor), so there is no running event loop
-                    # in this thread — asyncio.run() creates a fresh one.
-                    result = asyncio.run(t.execute(context, **kwargs))
-
+            # Closure capturing both the tool and the session context.
+            def _make_coroutine(t: BaseTool, context: SessionContext):
+                async def coro(**kwargs: Any) -> str:
+                    result = await t.execute(context, **kwargs)
                     if result.store_as and result.data is not None:
                         context.scratch[result.store_as] = result.data
-
-                    # Track the last tool call so executor.py can use the
-                    # output directly when intermediate_steps parsing fails
-                    # (e.g. LangChain version differences in observation type).
-                    context.scratch["_last_tool_call"] = (t.name, result.output)
-
                     return result.output
-                return func
+                return coro
 
             lc_tools.append(StructuredTool.from_function(
-                func=_make_func(tool, ctx),
+                coroutine=_make_coroutine(tool, ctx),
                 name=tool.name,
                 description=tool.description,
                 args_schema=schema,

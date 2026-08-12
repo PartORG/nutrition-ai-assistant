@@ -11,18 +11,21 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set
+from typing import TYPE_CHECKING, List, Dict, Any, Optional, Set
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
 from langchain_core.language_models import BaseChatModel
-from langchain.prompts import ChatPromptTemplate
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains.retrieval import create_retrieval_chain
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 
 from infrastructure.llm.llm_builder import build_llm as _build_llm_central
+
+if TYPE_CHECKING:
+    from infrastructure.rag.retrieval import Reranker
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,11 @@ class BaseRAG(ABC):
         llm_provider: str = "ollama",  # NEW: "ollama", "groq", or "openai"
         openai_api_key: Optional[str] = None,  # NEW: API key for OpenAI
         groq_api_key: Optional[str] = None,  # NEW: API key for Groq
+        use_hybrid: bool = False,  # dense + BM25 hybrid retrieval
+        reranker: Optional["Reranker"] = None,  # cross-encoder rerank pass
+        fetch_k: int = 30,  # candidate pool size before rerank
+        rerank_top_n: int = 8,  # docs returned after rerank
+        embeddings: Optional[HuggingFaceEmbeddings] = None,  # shared, prebuilt instance
     ):
         self.vectorstore_path = Path(vectorstore_path)
         self.model_name = model_name
@@ -61,6 +69,11 @@ class BaseRAG(ABC):
         self.llm_provider = llm_provider  # NEW
         self.openai_api_key = openai_api_key  # NEW
         self.groq_api_key = groq_api_key  # NEW
+        self.use_hybrid = use_hybrid
+        self.reranker = reranker
+        self.fetch_k = fetch_k
+        self.rerank_top_n = rerank_top_n
+        self._injected_embeddings = embeddings
 
         self.embeddings: Optional[HuggingFaceEmbeddings] = None
         self.llm: Optional[BaseChatModel] = None  # CHANGED: more generic type
@@ -83,38 +96,34 @@ class BaseRAG(ABC):
         """Orchestrate full system setup (template method)."""
         logger.info("Initializing %s...", self.__class__.__name__)
 
-        self.embeddings = HuggingFaceEmbeddings(
+        # Reuse a shared embeddings instance when one is injected (so a large
+        # model like BAAI/bge-m3 is loaded once, not once per RAG).
+        self.embeddings = self._injected_embeddings or HuggingFaceEmbeddings(
             model_name=self.embedding_model_name,
             encode_kwargs={"normalize_embeddings": True},
         )
-        logger.info("Embedding model loaded")
+        logger.info("Embedding model ready (%s)", self.embedding_model_name)
 
         # Build LLM based on configured provider
         self.llm = self._build_llm()
         logger.info("LLM initialized (provider=%s, model=%s)", self.llm_provider, self.model_name)
 
-        if not force_rebuild and self._vectorstore_exists():
+        needs_build = force_rebuild or not self._vectorstore_exists()
+        if not needs_build:
             logger.info("Loading existing vectorstore from disk")
             self._load_vectorstore()
-            if self.vectorstore is not None:
-                try:
-                    self.vectorstore.similarity_search("dimension check", k=1)
-                except AssertionError:
-                    logger.warning(
-                        "Vectorstore dimension mismatch detected — rebuilding "
-                        "index with current embedding model (%s)",
-                        self.embedding_model_name,
-                    )
-                    docs = self._ingest_documents()
-                    if not docs:
-                        logger.warning(
-                            "No documents available to rebuild — RAG non-functional"
-                        )
-                        return
-                    self._build_vectorstore(docs)
-        else:
-            reason = "force_rebuild=True" if force_rebuild else "no existing index"
+            if not self._embeddings_match_index():
+                logger.warning(
+                    "Vectorstore dimension mismatch detected — rebuilding index "
+                    "with current embedding model (%s)",
+                    self.embedding_model_name,
+                )
+                needs_build = True
+
+        if needs_build:
+            reason = "force_rebuild=True" if force_rebuild else "rebuild/no existing index"
             logger.info("Building vectorstore (%s)", reason)
+            self._prepare_rebuild()
             docs = self._ingest_documents()
             if not docs:
                 logger.warning("No documents ingested — RAG will be non-functional")
@@ -208,6 +217,34 @@ class BaseRAG(ABC):
     def _vectorstore_exists(self) -> bool:
         return self.vectorstore_path.exists()
 
+    def _index_dim_ok(self, vectorstore) -> bool:
+        """True if `vectorstore` accepts a query from the current embeddings.
+
+        A dimension mismatch (e.g. after switching EMBEDDING_MODEL) makes FAISS
+        raise an AssertionError on search — that signals a rebuild is needed.
+        """
+        try:
+            vectorstore.similarity_search("dimension check", k=1)
+            return True
+        except AssertionError:
+            return False
+        except Exception:
+            # Unrelated error (e.g. an empty index) — don't trigger a rebuild loop.
+            return True
+
+    def _embeddings_match_index(self) -> bool:
+        """Hook: True if the loaded index matches the current embedding model."""
+        if self.vectorstore is None:
+            return True
+        return self._index_dim_ok(self.vectorstore)
+
+    def _prepare_rebuild(self) -> None:  # noqa: B027 - optional hook, not abstract
+        """Hook: wipe stale on-disk artifacts before a (re)build.
+
+        Default is a no-op — `_build_vectorstore` overwrites the single store.
+        Subclasses with multiple stores / resumable ingestion override this.
+        """
+
     def _build_vectorstore(self, documents: List[Document]) -> None:
         logger.info("Creating FAISS index from %d documents", len(documents))
         self.vectorstore = FAISS.from_documents(
@@ -250,13 +287,45 @@ class BaseRAG(ABC):
         if self.vectorstore is None:
             logger.warning("No vectorstore available — retriever not created")
             return
-        self.retriever = self.vectorstore.as_retriever()
+        if self.use_hybrid or self.reranker is not None:
+            from infrastructure.rag.retrieval import HybridRetriever
+
+            self.retriever = HybridRetriever(
+                self.vectorstore,
+                final_k=self.rerank_top_n,
+                fetch_k=self.fetch_k,
+                use_hybrid=self.use_hybrid,
+                reranker=self.reranker,
+            )
+            logger.info(
+                "HybridRetriever active (hybrid=%s, rerank=%s, fetch_k=%d, top_n=%d)",
+                self.use_hybrid, self.reranker is not None, self.fetch_k, self.rerank_top_n,
+            )
+        else:
+            self.retriever = self.vectorstore.as_retriever()
 
     # ================================================================
     # Chain building
     # ================================================================
 
+    @staticmethod
+    def _format_docs(docs: List[Document]) -> str:
+        """Join retrieved documents into the prompt's ``{context}`` string.
+
+        Matches the default document separator used by the legacy
+        ``create_stuff_documents_chain`` (a blank line between chunks).
+        """
+        return "\n\n".join(doc.page_content for doc in docs)
+
     def _build_chain(self) -> None:
+        """Assemble the retrieval-augmented LCEL chain.
+
+        Replaces the legacy ``create_retrieval_chain`` /
+        ``create_stuff_documents_chain`` helpers (removed from the core
+        ``langchain`` package in 1.0). The contract is preserved: invoke with
+        ``{"input": query}`` and read the ``"answer"`` key off the result, which
+        also carries the retrieved ``"context"`` documents.
+        """
         if self.retriever is None:
             logger.warning("No retriever available — chain not built")
             return
@@ -264,11 +333,22 @@ class BaseRAG(ABC):
         system_prompt = self._get_system_prompt()
         prompt = ChatPromptTemplate.from_template(system_prompt)
 
-        stuff_chain = create_stuff_documents_chain(llm=self.llm, prompt=prompt)
-        self.rag_chain = create_retrieval_chain(
-            retriever=self.retriever,
-            combine_docs_chain=stuff_chain,
+        # input dict -> retrieved documents (retrievers expect the query string)
+        retrieve_docs: Runnable = RunnableLambda(lambda x: x["input"]) | self.retriever
+
+        # {input, context: [Document]} -> answer string
+        answer = (
+            RunnableLambda(
+                lambda x: {"input": x["input"], "context": self._format_docs(x["context"])}
+            )
+            | prompt
+            | self.llm
+            | StrOutputParser()
         )
+
+        self.rag_chain = RunnablePassthrough.assign(
+            context=retrieve_docs
+        ) | RunnablePassthrough.assign(answer=answer)
 
     # ================================================================
     # Indexed file tracking

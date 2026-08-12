@@ -122,8 +122,6 @@ class AnalyzeImageTool(BaseTool):
             source_label = detected.source or "unknown"
             if detected.source == "LLaVA":
                 source_note = "detected via LLaVA (visual AI)"
-            elif detected.source == "YOLO":
-                source_note = "detected via YOLO"
             else:
                 source_note = f"detected via {source_label}"
 

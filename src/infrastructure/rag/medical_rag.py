@@ -16,9 +16,9 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from domain.models import NutritionConstraints
 from infrastructure.rag.base_rag import BaseRAG
@@ -72,6 +72,11 @@ RULES:
         llm_provider: str = "ollama",
         openai_api_key: Optional[str] = None,
         groq_api_key: Optional[str] = None,
+        use_hybrid: bool = False,
+        reranker=None,
+        fetch_k: int = 30,
+        rerank_top_n: int = 8,
+        embeddings=None,
     ):
         # Only Ollama uses the native format="json" parameter.
         # Cloud providers (Groq, OpenAI) rely on the prompt for JSON output.
@@ -87,6 +92,11 @@ RULES:
             llm_provider=llm_provider,
             openai_api_key=openai_api_key,
             groq_api_key=groq_api_key,
+            use_hybrid=use_hybrid,
+            reranker=reranker,
+            fetch_k=fetch_k,
+            rerank_top_n=rerank_top_n,
+            embeddings=embeddings,
         )
         self.folder_paths = folder_paths if isinstance(folder_paths, list) else [folder_paths]
         self.chunk_size = chunk_size

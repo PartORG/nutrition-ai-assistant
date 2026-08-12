@@ -20,7 +20,7 @@ def _get_upload_dir() -> Path:
 
     Uses UPLOAD_DIR env var so Docker and local runs both work:
       - Locally:  ./uploads/ (relative to cwd, i.e. the project root)
-      - Docker:   /app/uploads  (shared volume between api and yolo-detector)
+      - Docker:   /app/uploads
     """
     upload_dir = Path(os.getenv("UPLOAD_DIR", "./uploads"))
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -34,9 +34,8 @@ async def upload_image(
 ):
     """Upload an image and get back a server-side path for use in WebSocket chat.
 
-    The returned path is valid on the server AND on the YOLO service (both
-    containers share the same ./uploads volume mount).  Pass it to the agent
-    via a WebSocket message so the analyze_image tool can open it.
+    The returned path is valid on the server. Pass it to the agent via a
+    WebSocket message so the analyze_image tool can open it.
     """
     upload_dir = _get_upload_dir()
     suffix = Path(file.filename or "image.jpg").suffix
@@ -56,8 +55,7 @@ async def analyze_image(
     service = factory.create_image_analysis_service()
     ctx = await build_session_ctx(user.user_id, "rest-image", factory)
 
-    # Save upload to the shared upload directory so the YOLO service can also
-    # read the file via the shared volume mount.
+    # Save upload to the upload directory so the detector can read the file.
     upload_dir = _get_upload_dir()
     suffix = Path(file.filename or "image.jpg").suffix
     dest = upload_dir / f"{uuid.uuid4().hex}{suffix}"

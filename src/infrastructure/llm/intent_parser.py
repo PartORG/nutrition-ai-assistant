@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel, Field
 
 from domain.models import UserIntent
 from domain.exceptions import IntentParsingError
@@ -178,6 +177,32 @@ Output: {{
 REMEMBER: Empty string "" for any field not explicitly mentioned!"""
 
 
+class _IntentSchema(BaseModel):
+    """Structured schema the LLM fills via `with_structured_output()`.
+
+    Fields mirror the keys taught by the system prompt. The list-like fields
+    stay comma-separated strings here (that's the format the prompt + examples
+    teach); `parse()` splits them into lists for the UserIntent domain model.
+    """
+
+    name: str = Field(default="", description="First name only, or empty if not stated")
+    surname: str = Field(default="", description="Last name only, or empty if not stated")
+    preferences: str = Field(
+        default="", description="General long-term food preferences, comma-separated, or empty"
+    )
+    restrictions: str = Field(
+        default="",
+        description="Permanent dietary restrictions and allergies, comma-separated, or empty",
+    )
+    health_condition: str = Field(
+        default="", description="Medical conditions in snake_case, comma-separated, or empty"
+    )
+    caretaker: str = Field(default="", description="Caretaker/helper name, or empty")
+    instructions: str = Field(
+        default="", description="Specific requests for THIS meal, comma-separated, or empty"
+    )
+
+
 class IntentParser:
     """Implements IntentParserPort using any supported LLM provider.
 
@@ -194,16 +219,21 @@ class IntentParser:
         openai_api_key: str = "",
         groq_api_key: str = "",
     ):
+        # No json_mode here — with_structured_output owns the output format.
+        # chat_model=True is required: with_structured_output is a chat-model
+        # feature. For ollama this selects ChatOllama (the text-completion
+        # OllamaLLM raises NotImplementedError); openai/groq are chat models
+        # regardless, so the flag is a harmless no-op there.
         self._llm = build_llm(
             provider=provider,
             model=model,
             temperature=0,
-            json_mode=True,
+            json_mode=False,
+            chat_model=True,
             ollama_base_url=ollama_base_url,
             openai_api_key=openai_api_key,
             groq_api_key=groq_api_key,
         )
-        self._parser = JsonOutputParser()
         self._chain = self._build_chain()
 
     def _build_chain(self):
@@ -211,7 +241,10 @@ class IntentParser:
             ("system", _SYSTEM_INSTRUCTIONS),
             ("user", "{query}"),
         ])
-        return prompt | self._llm | self._parser
+        # with_structured_output binds the schema via the provider's native
+        # structured-output / tool-calling API — more reliable than parsing a
+        # free-form JSON string, and works across ollama / groq / openai.
+        return prompt | self._llm.with_structured_output(_IntentSchema)
 
     async def parse(self, query: str) -> UserIntent:
         """Parse user query into structured UserIntent.
@@ -220,17 +253,20 @@ class IntentParser:
         """
         try:
             loop = asyncio.get_event_loop()
-            result: dict[str, Any] = await loop.run_in_executor(
+            result = await loop.run_in_executor(
                 None, self._chain.invoke, {"query": query},
             )
+            # with_structured_output returns the pydantic model (or, on some
+            # providers, a dict) — normalise to a dict either way.
+            data = result if isinstance(result, dict) else result.model_dump()
             return UserIntent(
-                name=result.get("name", ""),
-                surname=result.get("surname", ""),
-                preferences=_split_csv(result.get("preferences", "")),
-                restrictions=_split_csv(result.get("restrictions", "")),
-                health_conditions=_split_csv(result.get("health_condition", "")),
-                instructions=_split_csv(result.get("instructions", "")),
-                caretaker=result.get("caretaker", ""),
+                name=data.get("name", ""),
+                surname=data.get("surname", ""),
+                preferences=_split_csv(data.get("preferences", "")),
+                restrictions=_split_csv(data.get("restrictions", "")),
+                health_conditions=_split_csv(data.get("health_condition", "")),
+                instructions=_split_csv(data.get("instructions", "")),
+                caretaker=data.get("caretaker", ""),
             )
         except Exception as e:
             logger.error("Intent parsing failed: %s", e)

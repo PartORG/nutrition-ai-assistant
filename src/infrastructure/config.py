@@ -41,8 +41,19 @@ class Settings:
     llm_model_openai: str = "gpt-4.1-mini"
     llm_model_groq: str = "llama-3.3-70b-versatile"
 
-    # Embeddings (always local HuggingFace — not affected by llm_provider)
-    embedding_model: str = "sentence-transformers/all-mpnet-base-v2"
+    # Embeddings (always local HuggingFace — not affected by llm_provider).
+    # Shared by both RAGs. Switching this auto-rebuilds the FAISS indices on
+    # next startup (dimension-mismatch detection).
+    embedding_model: str = "BAAI/bge-m3"
+
+    # RAG retrieval quality
+    #   rag_use_hybrid   - combine dense (FAISS) + sparse (BM25) via RRF
+    #   rag_use_reranker - cross-encoder rerank pass over the candidates
+    rag_use_hybrid: bool = True
+    rag_use_reranker: bool = True
+    rag_reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rag_fetch_k: int = 30        # candidate pool size before rerank
+    rag_rerank_top_n: int = 8    # docs kept after rerank (medical RAG)
 
     # Connection details
     ollama_base_url: str = "http://localhost:11434/"
@@ -55,15 +66,12 @@ class Settings:
     # Database
     db_path: str = "users.db"
 
-    # CNN / Ingredient Detector
+    # CNN / Ingredient Detector (LLaVA via Ollama)
     cnn_model_path: str = ""
     cnn_class_labels_path: str = ""
-    cnn_detector_type: str = "yolo_with_fallback"
-    yolo_service_url: str = os.getenv("YOLO_SERVICE_URL", "http://localhost:8001")
 
-    # Shared upload directory for images.
-    # Must be accessible by BOTH the main API and the YOLO service.
-    # In Docker: mount ./uploads → /app/uploads in both containers.
+    # Upload directory for images.
+    # In Docker: mount ./uploads → /app/uploads.
     # Locally: defaults to ./uploads/ relative to the project root.
     upload_dir: str = "./uploads"
 
@@ -105,7 +113,12 @@ class Settings:
             llm_model_ollama=os.getenv("LLM_MODEL_OLLAMA", "llama3.2"),
             llm_model_openai=os.getenv("LLM_MODEL_OPENAI", "gpt-4.1-mini"),
             llm_model_groq=os.getenv("LLM_MODEL_GROQ", "llama-3.3-70b-versatile"),
-            embedding_model=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2"),
+            embedding_model=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
+            rag_use_hybrid=os.getenv("RAG_USE_HYBRID", "true").lower() in ("1", "true", "yes"),
+            rag_use_reranker=os.getenv("RAG_USE_RERANKER", "true").lower() in ("1", "true", "yes"),
+            rag_reranker_model=os.getenv("RAG_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+            rag_fetch_k=int(os.getenv("RAG_FETCH_K", "30")),
+            rag_rerank_top_n=int(os.getenv("RAG_RERANK_TOP_N", "8")),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/"),
             groq_api_key=groq_key,
             openai_api_key=openai_key,
@@ -114,8 +127,6 @@ class Settings:
             db_path=os.getenv("DB_PATH", "users.db"),
             cnn_model_path=os.getenv("CNN_MODEL_PATH", ""),
             cnn_class_labels_path=os.getenv("CNN_CLASS_LABELS_PATH", ""),
-            cnn_detector_type=os.getenv("CNN_DETECTOR_TYPE", "yolo_with_fallback"),
-            yolo_service_url=os.getenv("YOLO_SERVICE_URL", "http://localhost:8001"),
             upload_dir=os.getenv("UPLOAD_DIR", "./uploads"),
             jwt_secret=os.getenv("JWT_SECRET", "change-me-in-production"),
             jwt_expiry_hours=int(os.getenv("JWT_EXPIRY_HOURS", "24")),

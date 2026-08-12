@@ -34,18 +34,17 @@ A full walkthrough video is available at [`demo_material/nutrition_ai_assistent_
 **Try It Yourself**
 
 5. [Prerequisites and Setup](#prerequisites-and-setup)
-6. [Level 1 -- CLI (easiest)](#level-1--cli-easiest)
-7. [Level 2 -- Running Locally with Two Terminals](#level-2--running-locally-with-two-terminals)
-8. [Level 3 -- Running with Docker](#level-3--running-with-docker)
-9. [Level 4 -- Android APK (advanced)](#level-4--android-apk-advanced)
+6. [Level 1 -- Running Locally with Two Terminals](#level-1--running-locally-with-two-terminals)
+7. [Level 2 -- Running with Docker](#level-2--running-with-docker)
+8. [Level 3 -- Android APK (advanced)](#level-3--android-apk-advanced)
 
 **Reference**
 
-10. [Usage Overview](#usage-overview)
-11. [Data and Vector Store Management](#data-and-vector-store-management)
-12. [Testing and Quality](#testing-and-quality)
-13. [Roadmap / Future Improvements](#roadmap--future-improvements)
-14. [License](#license)
+9. [Usage Overview](#usage-overview)
+10. [Data and Vector Store Management](#data-and-vector-store-management)
+11. [Testing and Quality](#testing-and-quality)
+12. [Roadmap / Future Improvements](#roadmap--future-improvements)
+13. [License](#license)
 
 ---
 
@@ -54,12 +53,11 @@ A full walkthrough video is available at [`demo_material/nutrition_ai_assistent_
 ## Key Features
 
 - **Live chat for recipe recommendations** -- Conversational agent considers health conditions, preferences, allergies, and dietary restrictions when suggesting recipes.
-- **Ingredient extraction from images** -- Upload a photo and a YOLO + Food101 ResNet18 pipeline identifies ingredients, with LLaVA as a fallback.
+- **Ingredient extraction from images** -- Upload a photo and LLaVA (a vision-language model via Ollama) identifies the ingredients.
 - **Dashboard** -- Track saved recipes, daily nutritional intake, and dietary goals.
 - **Medical RAG** -- Automatic extraction of nutritional advice based on health conditions from medical literature (FAISS + BM25 hybrid retrieval).
 - **Recipe RAG** -- Retrieval-augmented recipe search across nutrition and recipe datasets.
 - **Safety filter** -- Every recommendation is checked against the user's health profile and nutrition limits before delivery.
-- **CLI access** -- Register, log in, query recipes, and enter interactive chat sessions from the terminal.
 
 ---
 
@@ -68,14 +66,13 @@ A full walkthrough video is available at [`demo_material/nutrition_ai_assistent_
 | Layer | Technology |
 |---|---|
 | Backend API | FastAPI 0.109, Uvicorn, Pydantic v2 |
-| LLM / Agent | LangChain 0.3, Ollama (llama3.2), Groq, OpenAI (switchable) |
-| Embeddings | HuggingFace sentence-transformers (all-mpnet-base-v2 & multi-qa-MiniLM-L6-cos-v1) |
-| Vector Search | FAISS (faiss-cpu), BM25 (rank_bm25) |
-| Image Detection | YOLOv8 (ultralytics), Food101 ResNet18, OpenCV, LLaVA fallback |
+| LLM / Agent | LangGraph (ReAct agent), LangChain 0.3, Ollama (llama3.2), Groq, OpenAI (switchable) |
+| Embeddings | HuggingFace (BAAI/bge-m3) |
+| Retrieval | Hybrid FAISS (faiss-cpu) + BM25 (rank_bm25) via RRF, cross-encoder reranking |
+| Image Detection | LLaVA vision-language model (via Ollama) |
 | Database | SQLite (aiosqlite) |
 | Auth | JWT (python-jose), bcrypt, passlib |
 | Frontend | Flutter 3.x (Web, Android, Windows) |
-| CLI | Typer, Rich |
 | Document Ingestion | pypdf, unstructured |
 | Containerization | Docker, Docker Compose |
 
@@ -92,30 +89,23 @@ A full walkthrough video is available at [`demo_material/nutrition_ai_assistent_
                    │
 ┌──────────────────▼───────────────────────────────────────────────┐
 │  FastAPI Backend  (src/)                                  :9000  │
-│  ├─ LangChain agent with 8 tools                                 │
+│  ├─ LangGraph agent with 8 tools                                 │
 │  ├─ Medical RAG + Recipe RAG  (FAISS + BM25 hybrid)              │
 │  ├─ Safety filter, intent parser                                 │
 │  └─ SQLite: users, recipes, nutrition, chat history              │
-└──────────┬──────────────────────────┬────────────────────────────┘
-           │                          │
- ┌─────────▼───────────┐    ┌─────────▼───────────┐
- │  Ollama  :11434     │    │  YOLO Detector      │
- │  • llama3.2 (LLM)   │    │  :8001              │
- │  • llava (fallback) │    │  • YOLOv8 detection │
- │  • embeddings       │    │  • Food101 ResNet18 │
- └─────────────────────┘    │  • Isolated env     │
-                            └─────────────────────┘
-
-┌──────────────────────────────────────────┐
-│  CLI  (run_cli.py)                       │
-│  Same ServiceFactory & agent as the API  │
-│  register / login / ask / chat / init    │
-└──────────────────────────────────────────┘
+└──────────┬───────────────────────────────────────────────────────┘
+           │
+ ┌─────────▼───────────┐
+ │  Ollama  :11434     │
+ │  • llama3.2 (LLM)   │
+ │  • llava (vision)   │
+ │  • embeddings       │
+ └─────────────────────┘
 ```
 
 **Agent tools:** `search_recipes` . `save_recipe` . `show_recipe` . `analyze_image` . `nutrition_status` . `general_chat` . `safety_guard` . `crisis_support`
 
-**Image detection:** YOLO microservice (primary) -> LLaVA via Ollama (fallback when YOLO finds nothing or is unavailable).
+**Image detection:** LLaVA via Ollama -- a vision-language model that extracts ingredients from food photos.
 
 ---
 
@@ -125,35 +115,25 @@ A full walkthrough video is available at [`demo_material/nutrition_ai_assistent_
 nutrition-ai-assistant/
 ├── src/                        # FastAPI backend (hexagonal architecture)
 │   ├── adapters/rest/          #   HTTP routes, WebSocket chat
-│   ├── adapters/cli/           #   CLI adapter (Typer + Rich)
-│   ├── agent/                  #   LangChain agent + 8 tools
+│   ├── agent/                  #   LangGraph agent + 8 tools
 │   ├── application/            #   Services, DTOs, session context
-│   ├── domain/                 #   Entities, ports, exceptions
-│   ├── infrastructure/         #   RAG, LLM, CNN adapters, SQLite repos
-│   ├── rags/                   #   RAG implementations (medical, recipe)
-│   ├── pipeline/               #   Pipeline orchestration
-│   ├── factory.py              #   Composition root -- all dependency wiring
-│   └── settings.py             #   Path constants
-├── services/
-│   └── yolo_detector/          # YOLO microservice (isolated Python env)
-│       ├── detector.py         #   YOLOv8 + Food101 ResNet18 pipeline
-│       ├── main.py             #   FastAPI wrapper (POST /detect, GET /health)
-│       ├── requirements.txt    #   ultralytics, opencv-headless, torch
-│       └── Dockerfile          #   Container definition
+│   ├── domain/                 #   Entities, value objects, ports, exceptions
+│   ├── infrastructure/         #   RAG, LLM, CNN adapters, SQLite repos, config
+│   └── factory.py              #   Composition root -- all dependency wiring
 ├── app/
 │   └── nutrition_ai_assistent/ # Flutter cross-platform client
 ├── data/                       # Demo recipe + nutrition CSVs
 ├── vector_databases/           # FAISS vector stores
 ├── db/                         # SQLite database (created at runtime)
 ├── uploads/                    # Shared image upload directory
-├── docs/                       # Architecture guide, CNN docs, analysis
+├── docs/                       # Architecture guide, analysis
 ├── demo_material/              # App screenshots and demo video
 ├── test_functionality/         # Functional test scripts
 ├── Dockerfile                  # Main API container
-├── docker-compose.yml          # Orchestrates API + YOLO + Ollama
+├── docker-compose.yml          # Orchestrates API + Ollama
 ├── run_api.py                  # Local dev entry (uvicorn, port 9000)
-├── run_cli.py                  # CLI entry point
-├── requirements.txt            # Production Python dependencies
+├── pyproject.toml              # Project metadata, dependencies (uv-managed)
+├── uv.lock                     # Locked, reproducible dependency set
 └── .env.example                # Environment variable template
 ```
 
@@ -165,10 +145,9 @@ Pick the level that matches your comfort. Each level builds on the setup from th
 
 | Level | What you get | Time estimate | You need |
 |---|---|---|---|
-| **1 -- CLI** | Chat with the AI agent in your terminal | ~5 min | Python, Ollama |
-| **2 -- Local** | Full app in the browser (Web) | ~10 min | + two terminals |
-| **3 -- Docker** | One-command containerized stack | ~10 min | Docker only |
-| **4 -- Android APK** | Install on a real phone | ~15 min | + Flutter SDK, device |
+| **1 -- Local** | Full app in the browser (Web) | ~10 min | Python, Ollama, two terminals |
+| **2 -- Docker** | One-command containerized stack | ~10 min | Docker only |
+| **3 -- Android APK** | Install on a real phone | ~15 min | + Flutter SDK, device |
 
 ---
 
@@ -178,10 +157,11 @@ Pick the level that matches your comfort. Each level builds on the setup from th
 
 | Tool | Version | Needed for |
 |---|---|---|
-| Python | 3.11+ | Levels 1, 2, 4 |
-| Ollama | latest | Levels 1, 2, 4 (local LLMs) |
-| Docker + Docker Compose | latest | Level 3 |
-| Flutter SDK | 3.x (SDK constraint ^3.9.2) | Level 4 |
+| Python | 3.11+ | Levels 1, 3 |
+| uv | latest | Levels 1, 3 (Python env + deps) |
+| Ollama | latest | Levels 1, 3 (local LLMs) |
+| Docker + Docker Compose | latest | Level 2 |
+| Flutter SDK | 3.x (SDK constraint ^3.9.2) | Level 3 |
 
 ### Environment Variables
 
@@ -216,27 +196,26 @@ At minimum, edit these:
 | `OLLAMA_BASE_URL` | `http://localhost:11434/` | Ollama server URL |
 | `EMBEDDING_MODEL` | `sentence-transformers/all-mpnet-base-v2` | HuggingFace embedding model |
 | `DB_PATH` | `users.db` | SQLite database path |
-| `CNN_DETECTOR_TYPE` | `yolo_with_fallback` | `yolo_with_fallback`, `yolo_only`, or `llava_only` |
-| `YOLO_SERVICE_URL` | `http://localhost:8001` | YOLO microservice URL |
-| `CNN_MODEL_PATH` | `llava` | LLaVA model name for fallback |
+| `CNN_MODEL_PATH` | `llava` | LLaVA model name used for image ingredient detection |
 
 </details>
 
-### Backend Environment (Levels 1, 2, 4)
+### Backend Environment (Levels 1, 3)
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then from the project root:
 
 ```bash
-# From project root
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
+uv sync
 ```
 
-### Start Ollama (Levels 1, 2, 4)
+This creates `.venv/` and installs the locked dependency set from `uv.lock`. Run commands with `uv run` (e.g. `uv run python run_api.py`), or activate the venv directly:
+
+```bash
+source .venv/bin/activate      # macOS / Linux
+.venv\Scripts\activate         # Windows
+```
+
+### Start Ollama (Levels 1, 3)
 
 ```bash
 ollama serve
@@ -246,78 +225,17 @@ ollama pull llava
 
 ---
 
-## Level 1 -- CLI (easiest)
+## Level 1 -- Running Locally
 
-**What:** Talk to the AI agent directly in your terminal. No browser, no Flutter, no Docker.
+**What:** Full application running in your browser with the Flutter web app, backed by the FastAPI server.
 
-**Prerequisites:** Python venv + Ollama running (see above).
+**Prerequisites:** Backend environment + Ollama running (see above), plus the Flutter SDK.
 
-```bash
-# From project root, with main venv activated
-python run_cli.py --help
-```
-
-**Quick start:**
+### Start the FastAPI Backend
 
 ```bash
-python run_cli.py register
-python run_cli.py login
-python run_cli.py ask "healthy dinner with chicken"
-python run_cli.py chat
-```
-
-Available commands:
-
-| Command | Description |
-|---|---|
-| `register` | Create a new account |
-| `login` | Sign in (saves session to `~/.nutrition-ai/session.json`) |
-| `logout` | Clear stored credentials |
-| `whoami` | Show the currently logged-in user |
-| `profile` | Display health profile and medical advice |
-| `ask "query"` | One-shot recipe/nutrition query |
-| `chat` | Interactive chat session |
-| `init` | Build/rebuild RAG vector stores |
-
----
-
-## Level 2 -- Running Locally with Two Terminals
-
-**What:** Full application running in your browser with the Flutter web app, backed by the FastAPI server and YOLO detector.
-
-**Prerequisites:** Everything from Level 1, plus the YOLO detector environment and Flutter SDK.
-
-### Terminal 1 -- YOLO Detector
-
-The YOLO service requires its own virtual environment due to conflicting dependency versions.
-
-```bash
-cd services/yolo_detector
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-uvicorn main:app --port 8001
-```
-
-Place model weights before running:
-- `services/yolo_detector/models/food101_resnet18_best.pth` (custom trained; required)
-- `yolov8n.pt` is auto-downloaded by ultralytics on first run
-
-Verify: `curl http://localhost:8001/health`
-
-### Terminal 2 -- FastAPI Backend
-
-```bash
-# From project root, activate the main venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
-
-python run_api.py
+# From project root
+uv run python run_api.py
 ```
 
 The API starts on `http://localhost:9000`. Verify: `curl http://localhost:9000/health`
@@ -338,9 +256,9 @@ flutter run -d windows
 
 ---
 
-## Level 3 -- Running with Docker
+## Level 2 -- Running with Docker
 
-**What:** One command spins up the entire backend stack (API + YOLO + Ollama) in containers. Connect with the Flutter web app or just use the API directly.
+**What:** One command spins up the entire backend stack (API + Ollama) in containers. Connect with the Flutter web app or just use the API directly.
 
 **Prerequisites:** Docker and Docker Compose installed. No Python or Ollama installation needed on the host.
 
@@ -350,8 +268,6 @@ flutter run -d windows
 cp .env.example .env
 # Edit .env -- at minimum set JWT_SECRET and any API keys needed
 ```
-
-Place YOLO model weights in `services/yolo_detector/models/food101_resnet18_best.pth`.
 
 ### 2. Build and start
 
@@ -364,7 +280,6 @@ This starts:
 | Container | Port | Description |
 |---|---|---|
 | `nutriai-api` | 8000 | FastAPI backend |
-| `nutriai-yolo` | 8001 | YOLO detection microservice |
 | `nutriai-ollama` | 11434 | Ollama LLM server |
 
 ### 3. Pull Ollama models (first run only)
@@ -378,7 +293,6 @@ docker exec -it nutriai-ollama ollama pull llava
 
 ```bash
 curl http://localhost:8000/health    # -> {"status": "ok", "version": "0.2.0"}
-curl http://localhost:8001/health    # -> {"status": "ok", "model_loaded": true}
 ```
 
 ### 5. Connect the Flutter web app (optional)
@@ -400,15 +314,15 @@ docker-compose down
 - The Docker API runs on port **8000** (Dockerfile CMD). The local dev entry (`run_api.py`) uses port **9000** with hot-reload.
 - GPU support for Ollama is commented out in `docker-compose.yml` -- uncomment the `deploy.resources` block if an NVIDIA GPU is available.
 - Data directories (`data/`, `data_test/`, `vector_databases/`) are mounted read-only. The `db/` and `uploads/` directories are writable bind mounts.
-- Service URLs between containers use Docker internal DNS (`http://ollama:11434/`, `http://yolo-detector:8001`), set automatically via environment in `docker-compose.yml`.
+- Service URLs between containers use Docker internal DNS (`http://ollama:11434/`), set automatically via environment in `docker-compose.yml`.
 
 ---
 
-## Level 4 -- Android APK (advanced)
+## Level 3 -- Android APK (advanced)
 
 **What:** Build an APK, install it on a real Android phone, and chat with the AI agent from your device.
 
-**Prerequisites:** Everything from Level 2 running (backend + YOLO), plus Flutter SDK and a connected Android device or emulator.
+**Prerequisites:** Everything from Level 1 running (backend + Ollama), plus Flutter SDK and a connected Android device or emulator.
 
 ### 1. Make sure the backend is reachable from the phone
 
@@ -455,7 +369,7 @@ A `dart_defines/local.json.example` template is provided for reference.
 
 ### Chat-based Recipe Recommendations
 
-1. Register and log in (via Flutter app or CLI).
+1. Register and log in via the Flutter app.
 2. Set up your health profile -- conditions, allergies, dietary restrictions, daily nutrition goals.
 3. Ask for recipe suggestions in natural language.
 4. The agent parses your intent, queries the Recipe RAG and Medical RAG, applies the safety filter against your profile, and returns tailored recommendations.
@@ -464,9 +378,8 @@ A `dart_defines/local.json.example` template is provided for reference.
 ### Image-based Ingredient Extraction
 
 1. Upload a food photo through the Flutter app.
-2. The image is sent to the YOLO microservice, which runs YOLOv8 object detection followed by Food101 ResNet18 classification.
-3. If YOLO returns no results (or is unavailable), the system falls back to LLaVA via Ollama for vision-based ingredient extraction.
-4. Detected ingredients are returned to the agent, which can then suggest recipes using those ingredients.
+2. The image is sent to LLaVA via Ollama, which extracts the ingredients from the photo.
+3. Detected ingredients are returned to the agent, which can then suggest recipes using those ingredients.
 
 ### Example Queries
 
@@ -482,9 +395,7 @@ and almonds. Can you suggest a creative recipe?
 
 - **Demo data included:** Small CSV datasets in `data/` (cleaned recipes, nutrition facts, healthy meals) are included for demonstration.
 - **Private medical data not included:** Medical research PDFs used by the Medical RAG are private and not committed to this repository.
-- **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. They can be rebuilt or extended:
-  - Via CLI: `python run_cli.py init`
-  - Via the functional test scripts in `test_functionality/` (e.g., `test_add_data_to_medical_vector_db.py`, `test_add_data_to_recipe_vector_db.py`, `test_recreate_vector_db.py`)
+- **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. They can be rebuilt or extended via the functional scripts in `test_functionality/` (e.g., `test_add_data_to_medical_vector_db.py`, `test_add_data_to_recipe_vector_db.py`, `test_recreate_vector_db.py`).
 - The system supports dynamically updating or extending vector stores with new data without restarting the application.
 
 ---

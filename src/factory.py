@@ -47,8 +47,6 @@ from infrastructure.llm.safety_filter import SafetyFilter
 from infrastructure.rag.medical_rag import MedicalRAG
 from infrastructure.rag.recipe_rag import RecipeNutritionRAG
 from infrastructure.cnn.ingredient_detector import LLaVAIngredientDetector
-from infrastructure.cnn.yolo_service_detector import YOLOServiceDetector
-from infrastructure.cnn.fallback_detector import FallbackIngredientDetector
 from application.context import SessionContext
 from application.services.recommendation import RecommendationService
 from application.services.recipe_manager import RecipeManagerService
@@ -123,17 +121,34 @@ class ServiceFactory:
         self._image_detector = self._build_image_detector()
         logger.info("Shared LLM components initialized")
 
+        # Shared cross-encoder reranker (built once, reused by both RAGs).
+        # Loads its model lazily on first query and degrades gracefully if the
+        # model can't be loaded, so this never blocks startup.
+        reranker = self._build_reranker()
+
+        # Shared embedding model — loaded ONCE here and injected into both RAGs
+        # (a large model like BAAI/bge-m3 would otherwise be loaded twice).
+        # Built in an executor to keep the heavy model load off the event loop.
+        loop = asyncio.get_event_loop()
+        embeddings = await loop.run_in_executor(None, self._build_embeddings)
+        logger.info("Shared embeddings ready (%s)", cfg.embedding_model)
+
         # Initialize Medical RAG with configured provider
         self._medical_rag = MedicalRAG(
             folder_paths=[str(cfg.pdf_dir)],
             model_name=cfg.active_llm_model,
             vectorstore_path=str(cfg.medical_vectorstore_path),
+            embedding_model=cfg.embedding_model,
+            embeddings=embeddings,
             ollama_base_url=cfg.ollama_base_url,
             llm_provider=cfg.llm_provider,
             openai_api_key=cfg.openai_api_key,
             groq_api_key=cfg.groq_api_key,
+            use_hybrid=cfg.rag_use_hybrid,
+            reranker=reranker,
+            fetch_k=cfg.rag_fetch_k,
+            rerank_top_n=cfg.rag_rerank_top_n,
         )
-        loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None, self._medical_rag.initialize, False,
         )
@@ -144,10 +159,14 @@ class ServiceFactory:
             data_folder=str(cfg.data_dir),
             model_name=cfg.active_llm_model,
             vectorstore_path=str(cfg.recipes_nutrition_vector_path),
+            embedding_model=cfg.embedding_model,
+            embeddings=embeddings,
             ollama_base_url=cfg.ollama_base_url,
             llm_provider=cfg.llm_provider,
             openai_api_key=cfg.openai_api_key,
             groq_api_key=cfg.groq_api_key,
+            use_hybrid=cfg.rag_use_hybrid,
+            reranker=reranker,
         )
         await loop.run_in_executor(
             None, self._recipe_rag.initialize,
@@ -298,40 +317,41 @@ class ServiceFactory:
             chat_model=True,   # agent needs ChatModel for tool calling
         )
 
-    def _build_image_detector(self):
-        """Build the ingredient detector (called once during init)."""
-        detector_type = self._config.cnn_detector_type
-        llava_model = self._config.cnn_model_path or "llava"
+    def _build_embeddings(self):
+        """Build the shared HuggingFace embedding model (called once during init)."""
+        from langchain_huggingface import HuggingFaceEmbeddings
 
-        if detector_type == "llava_only":
-            detector = LLaVAIngredientDetector(
-                ollama_base_url=self._config.ollama_base_url,
-                model=llava_model,
-            )
-            logger.info(
-                "Image detector: LLaVA ('%s') at %s",
-                llava_model, self._config.ollama_base_url,
-            )
-        elif detector_type == "yolo_only":
-            detector = YOLOServiceDetector(
-                service_url=self._config.yolo_service_url,
-            )
-            logger.info(
-                "Image detector: YOLO-only at %s", self._config.yolo_service_url,
-            )
-        else:  # "yolo_with_fallback" (default)
-            yolo = YOLOServiceDetector(
-                service_url=self._config.yolo_service_url,
-            )
-            llava = LLaVAIngredientDetector(
-                ollama_base_url=self._config.ollama_base_url,
-                model=llava_model,
-            )
-            detector = FallbackIngredientDetector(primary=yolo, fallback=llava)
-            logger.info(
-                "Image detector: YOLO (%s) with LLaVA fallback",
-                self._config.yolo_service_url,
-            )
+        logger.info("Loading embedding model: %s", self._config.embedding_model)
+        return HuggingFaceEmbeddings(
+            model_name=self._config.embedding_model,
+            encode_kwargs={"normalize_embeddings": True},
+        )
+
+    def _build_reranker(self):
+        """Build the shared cross-encoder reranker, or None if disabled."""
+        cfg = self._config
+        if not cfg.rag_use_reranker:
+            logger.info("RAG reranker disabled")
+            return None
+        from infrastructure.rag.retrieval import Reranker
+
+        logger.info("RAG reranker: %s (top_n=%d)", cfg.rag_reranker_model, cfg.rag_rerank_top_n)
+        return Reranker(
+            model_name=cfg.rag_reranker_model,
+            top_n=cfg.rag_rerank_top_n,
+        )
+
+    def _build_image_detector(self):
+        """Build the LLaVA ingredient detector (called once during init)."""
+        llava_model = self._config.cnn_model_path or "llava"
+        detector = LLaVAIngredientDetector(
+            ollama_base_url=self._config.ollama_base_url,
+            model=llava_model,
+        )
+        logger.info(
+            "Image detector: LLaVA ('%s') at %s",
+            llava_model, self._config.ollama_base_url,
+        )
         return detector
 
     def _ensure_initialized(self) -> None:

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Union
 
 import pandas as pd
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
 
@@ -186,6 +186,10 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         llm_provider: str = "ollama",
         openai_api_key: Optional[str] = None,
         groq_api_key: Optional[str] = None,
+        use_hybrid: bool = False,
+        reranker=None,
+        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
+        embeddings=None,
     ):
         # Only Ollama uses the native format="json" parameter.
         # Cloud providers (Groq, OpenAI) rely on the prompt for JSON output.
@@ -195,11 +199,16 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             vectorstore_path=vectorstore_path,
             model_name=model_name,
             temperature=temperature,
+            embedding_model=embedding_model,
             ollama_base_url=ollama_base_url,
             llm_format=llm_format,
             llm_provider=llm_provider,
             openai_api_key=openai_api_key,
             groq_api_key=groq_api_key,
+            use_hybrid=use_hybrid,
+            reranker=reranker,
+            rerank_top_n=k,
+            embeddings=embeddings,
         )
         self.data_folder = Path(data_folder)
         self.k = k
@@ -373,6 +382,31 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         nutrition_path = self.vectorstore_path / "nutrition_facts_db"
         return recipes_path.exists() and nutrition_path.exists()
 
+    def _embeddings_match_index(self) -> bool:
+        """Check BOTH stores — the base hook only looks at self.vectorstore."""
+        for vectorstore in (self.vectorstore_recipes, self.vectorstore_nutrition):
+            if vectorstore is not None and not self._index_dim_ok(vectorstore):
+                return False
+        return True
+
+    def _prepare_rebuild(self) -> None:
+        """Wipe both stores + resumable batch-meta so a model switch re-embeds cleanly.
+
+        Without this, switching EMBEDDING_MODEL would leave stale-dimension indices
+        (and the batch-ingestion checkpoint would skip re-embedding the rows).
+        """
+        import shutil
+
+        for sub in ("recipes_and_meals_db", "nutrition_facts_db"):
+            target = self.vectorstore_path / sub
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=True)
+        for meta in self.vectorstore_path.glob("*_batch_meta.json"):
+            meta.unlink(missing_ok=True)
+        self.vectorstore_recipes = None
+        self.vectorstore_nutrition = None
+        logger.info("Cleared recipe/nutrition indices for a clean rebuild")
+
     def _build_vectorstore(self, documents: List[Document]) -> None:
         recipe_docs = [d for d in documents if d.metadata.get("_collection") == "recipes"]
         nutrition_docs = [d for d in documents if d.metadata.get("_collection") == "nutrition"]
@@ -420,9 +454,14 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             vectorstore_recipes=self.vectorstore_recipes,
             vectorstore_nutrition=self.vectorstore_nutrition,
             k=self.k,
+            use_hybrid=self.use_hybrid,
+            reranker=self.reranker,
         )
         self.retriever = self.smart_retriever
-        logger.info("SmartRetriever created (k=%d)", self.k)
+        logger.info(
+            "SmartRetriever created (k=%d, hybrid=%s, rerank=%s)",
+            self.k, self.use_hybrid, self.reranker is not None,
+        )
 
     # ================================================================
     # Batched CSV ingestion
