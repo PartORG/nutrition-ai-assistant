@@ -1,33 +1,7 @@
-# Git ignore rules
-.idea
-.python-version
-
-# Standard Python ignores
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.pdb
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
-*.manifest
-*.spec
-*.log
-*.pot
-*.pyc
-*.pyo
-*.pyd
-*.sqlite3
-*.db
-*.db-journal
-*.mo
-*.pot
-*.py[cod]
-*.so
-*.tmp
+# ── Editors / OS ──
+.idea/
+.vscode/
+.DS_Store
 *.swp
 *.swo
 *.bak
@@ -35,49 +9,70 @@ build/
 *.rej
 *.sublime-workspace
 *.sublime-project
-*.vscode/
-*.env
-*.venv
-.env/
+
+# ── Secrets ──
+# .env, .env.local, .env.production, … — but keep the checked-in template.
+.env*
+!.env.example
+
+# ── Python ──
+.python-version
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+*.manifest
+*.spec
+*.log
+*.tmp
+
+# Virtualenvs
 .venv/
-!test_functionality/
-*.tox/
+venv/
+
+# Test / lint / type caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
 .tox/
-*.coverage
 .coverage
 .coverage.*
 .cache/
-*.pytest_cache/
-.pytest_cache/
-*.mypy_cache/
-.mypy_cache/
-*.hypothesis/
-.hypothesis/
-*.ipynb_checkpoints/
 .ipynb_checkpoints/
 
-# Exclude data folder and its subfolders
+# ── Project data ──
+*.db
+*.db-journal
+*.sqlite3
 /data_test
-requirements-dev.txt
 vector_databases/
-
-# claude
-.claude_history/
-.claude/
+requirements-dev.txt
 
 # Uploaded images — keep the folder (via .gitkeep) but not the files
 uploads/*
 !uploads/.gitkeep
 
-# Flutter/Dart
-pubspec.lock
+# ── Claude ──
+.claude/
+.claude_history/
+
+# ── Flutter / Dart ──
+# Per-platform generated files are handled by the nested .gitignore files
+# under app/nutrition_ai_assistent/{android,ios,linux,macos,windows}/.
+# Do NOT ignore linux/flutter/, windows/flutter/ or macos/Flutter/ wholesale:
+# those directories contain CMakeLists.txt and other build inputs that must
+# be committed. pubspec.lock is committed too — this is an app, not a package.
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
 .pub-cache/
 .pub/
-build/
 *.dart.js
 *.js_
 *.js.deps
@@ -86,12 +81,15 @@ build/
 *.freezed.dart
 *.mocks.dart
 
+# Flutter generated plugin registrants
+**/flutter/generated_plugin_registrant.*
+**/flutter/generated_plugins.cmake
+**/flutter/GeneratedPluginRegistrant.*
+**/Flutter/GeneratedPluginRegistrant.*
+
 # Android (Flutter)
-**/android/**/gradle-wrapper.jar
 **/android/.gradle
 **/android/captures/
-**/android/gradlew
-**/android/gradlew.bat
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
 
@@ -108,6 +106,7 @@ build/
 **/ios/Flutter/Flutter.framework
 **/ios/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
 **/ios/Flutter/ephemeral/
 **/ios/Flutter/app.flx
 **/ios/Flutter/app.zip
@@ -123,13 +122,3 @@ build/
 # Windows/Linux (Flutter)
 **/windows/flutter/ephemeral/
 **/linux/flutter/ephemeral/
-
-# Flutter generated plugin registrant files
-**/flutter/generated_plugin_registrant.*
-**/flutter/generated_plugins.cmake
-**/flutter/GeneratedPluginRegistrant.*
-
-# Ignore all platform Flutter folders
-**/macos/Flutter/
-**/linux/flutter/
-**/windows/flutter/
