@@ -1,0 +1,95 @@
+[project]
+name = "nutrition-ai-assistant"
+version = "0.2.0"
+description = "Personalized nutrition and recipe recommendation API powered by LLM, RAG, and computer vision."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+
+dependencies = [
+    # ── Core API ──
+    "fastapi==0.109.0",
+    "uvicorn[standard]==0.27.0",
+    "pydantic>=2.7.4,<3.0.0",
+    "python-multipart>=0.0.9",
+    "python-dotenv==1.0.1",
+    # ── Auth ──
+    "bcrypt==3.2.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    # ── Database ──
+    "aiosqlite==0.22.1",
+    "aiofiles==22.1.0",
+    # ── LangChain & RAG (1.x) ──
+    "langchain>=1.3,<2",
+    "langchain-core>=1.4,<2",
+    "langgraph>=1.2,<2",
+    "langchain-community>=0.4,<0.5",
+    "langchain-text-splitters>=1.1,<2",
+    "langchain-huggingface>=1.2,<2",
+    "langchain-ollama>=1.1,<2",
+    "langchain-groq>=1.1,<2",
+    "langchain-openai>=1.3,<2",
+    "langchainhub>=0.1.21",
+    # ── LLM / Embeddings ──
+    "ollama>=0.3.0",
+    "transformers>=4.40.0",
+    "sentence-transformers==3.3.1",
+    # torch>=2.6 required by transformers' torch.load CVE guard (CVE-2025-32434);
+    # torchvision 0.21.0 is the matching pair for torch 2.6.0.
+    "torch==2.6.0",
+    "torchvision==0.21.0",
+    # ── Vector search ──
+    "faiss-cpu==1.9.0.post1",
+    "rank-bm25==0.2.2",
+    # ── Document ingestion ──
+    "pypdf==5.1.0",
+    "unstructured==0.16.11",
+    "openpyxl==3.1.5",
+    # ── HTTP ──
+    "requests>=2.32.5",
+    # ── Data ──
+    "numpy==1.26.4",
+    "pandas==2.2.2",
+    # ── Utilities ──
+    "typing-extensions>=4.14",
+    "protobuf==4.25.3",
+    "jsonschema==4.23.0",
+    "rpds-py==0.19.1",
+    "six==1.16.0",
+]
+
+[project.scripts]
+nutriai-api = "adapters.rest.app:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Flat `src/` layout: src is the import root, so `factory`, `adapters`,
+# `infrastructure`, etc. are all importable top-level once installed.
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = ["factory"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
