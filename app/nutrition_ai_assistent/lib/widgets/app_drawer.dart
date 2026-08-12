@@ -67,20 +67,29 @@ class AppDrawer extends StatelessWidget {
             icon: Icons.dashboard_outlined,
             label: 'Dashboard',
             selected: selectedIndex == 0,
-            onTap: () { onItemSelected(0); Navigator.pop(context); },
+            onTap: () {
+              onItemSelected(0);
+              Navigator.pop(context);
+            },
           ),
           _DrawerItem(
             icon: Icons.chat_outlined,
             assetIcon: 'assets/icons/icon_chat.png',
             label: 'Chat with AI',
             selected: selectedIndex == 1,
-            onTap: () { onItemSelected(1); Navigator.pop(context); },
+            onTap: () {
+              onItemSelected(1);
+              Navigator.pop(context);
+            },
           ),
           _DrawerItem(
             icon: Icons.person_outline,
             label: 'Profile',
             selected: selectedIndex == 2,
-            onTap: () { onItemSelected(2); Navigator.pop(context); },
+            onTap: () {
+              onItemSelected(2);
+              Navigator.pop(context);
+            },
           ),
           const Divider(),
           _DrawerItem(
@@ -91,8 +100,7 @@ class AppDrawer extends StatelessWidget {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (_) => const SavedRecipesScreen()),
+                MaterialPageRoute(builder: (_) => const SavedRecipesScreen()),
               );
             },
           ),
@@ -115,7 +123,10 @@ class AppDrawer extends StatelessWidget {
             label: 'Sign Out',
             selected: false,
             color: AppColors.error,
-            onTap: () { Navigator.pop(context); onSignOut(); },
+            onTap: () {
+              Navigator.pop(context);
+              onSignOut();
+            },
           ),
           const SizedBox(height: 8),
         ],
@@ -143,7 +154,8 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = color ?? (selected ? AppColors.primary : Colors.grey[700]!);
+    final effectiveColor =
+        color ?? (selected ? AppColors.primary : Colors.grey[700]!);
     return ListTile(
       leading: assetIcon != null
           ? ImageIcon(AssetImage(assetIcon!), color: effectiveColor, size: 24)

@@ -79,18 +79,20 @@ class _ChatScreenState extends State<ChatScreen> {
           _scrollToBottom();
         },
         onError: (_) {
-          if (mounted)
+          if (mounted) {
             setState(() {
               _connected = false;
               _waitingForResponse = false;
             });
+          }
         },
         onDone: () {
-          if (mounted)
+          if (mounted) {
             setState(() {
               _connected = false;
               _waitingForResponse = false;
             });
+          }
         },
       );
       if (mounted) setState(() => _connected = true);

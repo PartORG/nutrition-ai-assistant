@@ -694,7 +694,8 @@ src/
 │
 └── factory.py        ← Composition root: wires all dependencies together
 
-test_functionality/   ← Functional test scripts (run manually, outside pytest)
+tests/                ← Automated tests (pytest, run by CI)
+scripts/              ← Manual operator scripts (run by hand, need Ollama)
     ├── test_agent.py                         ← Interactive CLI chat with the full agent
     ├── test_intent_parser.py                 ← Test intent parsing in isolation
     ├── test_rag_medical.py                   ← Test Medical RAG constraints extraction
@@ -1749,7 +1750,7 @@ Create a `.env` file in the project root for local development. In Docker, these
 
 ## 14. Functional Testing Scripts
 
-**Location:** `test_functionality/`
+**Location:** `scripts/` (manual) and `tests/` (automated)
 
 These are standalone Python scripts for manually testing individual components of the system **outside** pytest. They are useful when:
 - You want to interact with a live Ollama instance and see the raw output
@@ -1797,11 +1798,11 @@ print(result)
 
 ```bash
 # From the project root (requires .env to be present)
-cd test_functionality
+cd scripts
 python test_agent.py
 
 # Or from the project root directly
-python test_functionality/test_agent.py
+uv run python scripts/chat_repl.py
 ```
 
 The scripts load `.env` via `Settings.from_env()`, so make sure your environment variables (Ollama URL, API keys, DB path, etc.) are set before running.

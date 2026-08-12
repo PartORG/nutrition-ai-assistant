@@ -130,10 +130,9 @@ class _RecipeCardState extends State<_RecipeCard> {
     final recipeId = widget.recipe['id'] as int?;
     if (recipeId != null) {
       AppServices.instance.api
-          .patch(
-            '/api/dashboard/recipes/$recipeId/rating',
-            {'rating': rating.toInt()},
-          )
+          .patch('/api/dashboard/recipes/$recipeId/rating', {
+            'rating': rating.toInt(),
+          })
           .catchError((_) {});
     }
   }
@@ -218,27 +217,25 @@ class _RecipeCardState extends State<_RecipeCard> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ...[1, 2, 3, 4, 5]
-                              .map(
-                                (star) => GestureDetector(
-                                  onTap: () => _setRating(star.toDouble()),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 1,
-                                    ),
-                                    child: Icon(
-                                      star <= _rating
-                                          ? Icons.star
-                                          : Icons.star_outline,
-                                      color: star <= _rating
-                                          ? Colors.amber
-                                          : Colors.grey,
-                                      size: 18,
-                                    ),
-                                  ),
+                          ...[1, 2, 3, 4, 5].map(
+                            (star) => GestureDetector(
+                              onTap: () => _setRating(star.toDouble()),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 1,
                                 ),
-                              )
-                              .toList(),
+                                child: Icon(
+                                  star <= _rating
+                                      ? Icons.star
+                                      : Icons.star_outline,
+                                  color: star <= _rating
+                                      ? Colors.amber
+                                      : Colors.grey,
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       if (_rating > 0)

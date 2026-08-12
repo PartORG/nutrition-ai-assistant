@@ -128,7 +128,9 @@ nutrition-ai-assistant/
 ├── uploads/                    # Shared image upload directory
 ├── docs/                       # Architecture guide, analysis
 ├── demo_material/              # App screenshots and demo video
-├── test_functionality/         # Functional test scripts
+├── tests/                      # Automated tests (pytest) — run by CI
+├── scripts/                    # Manual operator scripts (index rebuild, smoke checks)
+├── training/                   # YOLO fine-tuning pipeline (not shipped in the image)
 ├── Dockerfile                  # Main API container
 ├── docker-compose.yml          # Orchestrates API + Ollama
 ├── run_api.py                  # Local dev entry (uvicorn, port 9000)
@@ -395,33 +397,37 @@ and almonds. Can you suggest a creative recipe?
 
 - **Demo data included:** Small CSV datasets in `data/` (cleaned recipes, nutrition facts, healthy meals) are included for demonstration.
 - **Private medical data not included:** Medical research PDFs used by the Medical RAG are private and not committed to this repository.
-- **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. They can be rebuilt or extended via the functional scripts in `test_functionality/` (e.g., `test_add_data_to_medical_vector_db.py`, `test_add_data_to_recipe_vector_db.py`, `test_recreate_vector_db.py`).
+- **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. Rebuild or extend them with the scripts in `scripts/` (`rebuild_indexes.py`, `add_recipe_docs.py`, `add_medical_docs.py`). Run these on the host — docker-compose mounts `vector_databases/` read-only, and the app now fails fast with a clear message rather than attempting a write there.
 - The system supports dynamically updating or extending vector stores with new data without restarting the application.
 
 ---
 
 ## Testing and Quality
 
-Functional test scripts are located in `test_functionality/`:
-
-| Script | Purpose |
-|---|---|
-| `test_agent.py` | End-to-end agent conversation test |
-| `test_rag_medical.py` | Medical RAG retrieval validation |
-| `test_rag_recipe.py` | Recipe RAG retrieval validation |
-| `test_safety_filter.py` | Safety filter logic |
-| `test_intent_parser.py` | Intent classification |
-| `test_search_recipes_tool.py` | Recipe search tool |
-| `test_add_data_to_vector_db.py` | Vector store data ingestion |
-| `test_add_data_to_medical_vector_db.py` | Medical vector store ingestion |
-| `test_add_data_to_recipe_vector_db.py` | Recipe vector store ingestion |
-| `test_recreate_vector_db.py` | Full vector store rebuild |
-| `test_add_dummy_user.py` | User creation test |
-
-Run individual scripts:
+### Automated tests
 
 ```bash
-python test_functionality/test_agent.py
+uv run pytest tests/ -q          # Python
+cd app/nutrition_ai_assistent && flutter test   # Flutter
+```
+
+CI runs these on every push and pull request via two workflows with path
+filters, so a Dart change doesn't trigger the Python jobs and vice versa:
+
+| Workflow | Jobs |
+|---|---|
+| `.github/workflows/python.yml` | ruff + lockfile check, pytest, Docker build (on push) |
+| `.github/workflows/flutter.yml` | `dart format` check, `flutter analyze`, `flutter test`, web build (on push) |
+
+### Manual scripts
+
+`scripts/` holds operator scripts for rebuilding vector indexes and smoke-checking
+components against a live Ollama. They print results for a human to read and
+assert nothing — see [`scripts/README.md`](scripts/README.md).
+
+```bash
+uv run python scripts/rebuild_indexes.py   # full index rebuild
+uv run python scripts/chat_repl.py         # interactive agent chat
 ```
 
 ---

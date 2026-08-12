@@ -31,11 +31,13 @@ class _MealHistoryScreenState extends State<MealHistoryScreen> {
     });
     try {
       final data =
-          await AppServices.instance.api.get('/api/conversations') as List<dynamic>;
+          await AppServices.instance.api.get('/api/conversations')
+              as List<dynamic>;
       if (!mounted) return;
       setState(() {
-        _conversations =
-            data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _conversations = data
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -54,15 +56,21 @@ class _MealHistoryScreenState extends State<MealHistoryScreen> {
   }
 
   Future<void> _loadMessages(String conversationId) async {
-    if (_messages.containsKey(conversationId)) return; // already loaded / loading
+    if (_messages.containsKey(conversationId)) {
+      return; // already loaded / loading
+    }
     setState(() => _messages[conversationId] = null); // null signals loading
     try {
-      final data = await AppServices.instance.api
-          .get('/api/conversations/$conversationId/messages') as List<dynamic>;
+      final data =
+          await AppServices.instance.api.get(
+                '/api/conversations/$conversationId/messages',
+              )
+              as List<dynamic>;
       if (!mounted) return;
       setState(() {
-        _messages[conversationId] =
-            data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _messages[conversationId] = data
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
       });
     } catch (_) {
       if (!mounted) return;
@@ -101,30 +109,30 @@ class _MealHistoryScreenState extends State<MealHistoryScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _ErrorView(message: _error!, onRetry: _loadConversations)
-              : _conversations.isEmpty
-                  ? _EmptyView(
-                      icon: Icons.history,
-                      title: 'No conversations yet',
-                      subtitle: 'Chat with NutriAI to get started',
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadConversations,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _conversations.length,
-                        itemBuilder: (context, i) {
-                          final conv = _conversations[i];
-                          final id = conv['conversation_id'] as String? ?? '';
-                          return _ConversationTile(
-                            conversation: conv,
-                            messages: _messages[id],
-                            onExpand: () => _loadMessages(id),
-                            formatDate: _formatDate,
-                          );
-                        },
-                      ),
-                    ),
+          ? _ErrorView(message: _error!, onRetry: _loadConversations)
+          : _conversations.isEmpty
+          ? _EmptyView(
+              icon: Icons.history,
+              title: 'No conversations yet',
+              subtitle: 'Chat with NutriAI to get started',
+            )
+          : RefreshIndicator(
+              onRefresh: _loadConversations,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _conversations.length,
+                itemBuilder: (context, i) {
+                  final conv = _conversations[i];
+                  final id = conv['conversation_id'] as String? ?? '';
+                  return _ConversationTile(
+                    conversation: conv,
+                    messages: _messages[id],
+                    onExpand: () => _loadMessages(id),
+                    formatDate: _formatDate,
+                  );
+                },
+              ),
+            ),
     );
   }
 }
@@ -158,8 +166,11 @@ class _ConversationTile extends StatelessWidget {
             color: AppColors.cardGreen,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.chat_bubble_outline,
-              color: AppColors.primary, size: 20),
+          child: const Icon(
+            Icons.chat_bubble_outline,
+            color: AppColors.primary,
+            size: 20,
+          ),
         ),
         title: Text(
           title,
@@ -183,12 +194,15 @@ class _ConversationTile extends StatelessWidget {
           else if (messages!.isEmpty)
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Text('No messages found.',
-                  style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'No messages found.',
+                style: TextStyle(color: Colors.grey),
+              ),
             )
           else ...[
-            ...messages!.map((msg) =>
-                _MessageRow(message: msg, formatDate: formatDate)),
+            ...messages!.map(
+              (msg) => _MessageRow(message: msg, formatDate: formatDate),
+            ),
             const SizedBox(height: 8),
           ],
         ],
@@ -218,8 +232,7 @@ class _MessageRow extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 14,
-            backgroundColor:
-                isUser ? AppColors.primary : AppColors.cardGreen,
+            backgroundColor: isUser ? AppColors.primary : AppColors.cardGreen,
             child: Icon(
               isUser ? Icons.person : Icons.eco,
               size: 14,
@@ -247,8 +260,10 @@ class _MessageRow extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         formatDate(createdAt),
-                        style:
-                            const TextStyle(fontSize: 10, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ],
@@ -258,8 +273,7 @@ class _MessageRow extends StatelessWidget {
                   content,
                   maxLines: 5,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(fontSize: 13, color: Colors.black87),
+                  style: const TextStyle(fontSize: 13, color: Colors.black87),
                 ),
               ],
             ),
@@ -301,8 +315,11 @@ class _EmptyView extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  const _EmptyView(
-      {required this.icon, required this.title, required this.subtitle});
+  const _EmptyView({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -312,11 +329,12 @@ class _EmptyView extends StatelessWidget {
         children: [
           Icon(icon, size: 64, color: Colors.grey[300]),
           const SizedBox(height: 16),
-          Text(title,
-              style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+          Text(title, style: TextStyle(color: Colors.grey[500], fontSize: 16)),
           const SizedBox(height: 6),
-          Text(subtitle,
-              style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey[400], fontSize: 13),
+          ),
         ],
       ),
     );

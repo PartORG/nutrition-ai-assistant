@@ -92,14 +92,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Center(
-                  child: Icon(Icons.person_add, size: 48, color: AppColors.primary),
+                  child: Icon(
+                    Icons.person_add,
+                    size: 48,
+                    color: AppColors.primary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
                     'Tell us about yourself',
-                    style: Theme.of(context).textTheme.bodyMedium
-                        ?.copyWith(color: Colors.grey),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -144,7 +149,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: Icon(Icons.alternate_email),
                   ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Please enter a username';
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Please enter a username';
+                    }
                     if (v.trim().length < 3) return 'Minimum 3 characters';
                     return null;
                   },
@@ -157,15 +164,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     labelText: 'Password *',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
                       onPressed: () =>
                           setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'Please enter a password';
+                    if (v == null || v.isEmpty) {
+                      return 'Please enter a password';
+                    }
                     if (v.length < 6) return 'Minimum 6 characters';
                     return null;
                   },
@@ -178,9 +189,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     labelText: 'Confirm Password *',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirm
-                          ? Icons.visibility_off
-                          : Icons.visibility),
+                      icon: Icon(
+                        _obscureConfirm
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
                       onPressed: () =>
                           setState(() => _obscureConfirm = !_obscureConfirm),
                     ),
@@ -240,8 +253,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Used to personalise recipe recommendations and dietary advice.',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: Colors.grey),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -251,8 +265,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Health Condition(s)',
                     prefixIcon: Icon(Icons.medical_services_outlined),
-                    hintText:
-                        'e.g. diabetes, hypertension, celiac disease',
+                    hintText: 'e.g. diabetes, hypertension, celiac disease',
                     alignLabelWithHint: true,
                   ),
                 ),
@@ -265,7 +278,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white,
+                            strokeWidth: 2,
+                            color: Colors.white,
                           ),
                         )
                       : const Text(

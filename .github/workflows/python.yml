@@ -1,0 +1,93 @@
+name: Python
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - "training/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "Dockerfile"
+      - ".github/workflows/python.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - "training/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "Dockerfile"
+      - ".github/workflows/python.yml"
+
+concurrency:
+  group: python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      # --only-group dev installs ruff and nothing else — no torch, no faiss —
+      # so this job finishes in seconds and gives fast feedback while the test
+      # job is still resolving the ML stack. Uses the project's pinned ruff, so
+      # CI and local agree.
+      - name: Ruff
+        run: uv run --only-group dev ruff check --output-format=github src tests scripts training
+
+      - name: Lockfile is current
+        run: uv lock --check
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      # torch/torchvision resolve from the CPU wheel index (see pyproject.toml),
+      # which is ~2 GB rather than the ~6 GB CUDA build. The uv cache above
+      # makes repeat runs fast; a cold run is dominated by this step.
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        run: uv run pytest tests/ -q
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    # Only gate merges to a shared branch on this — it is the slowest job and
+    # a PR's lint+test failing is the signal that matters.
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: nutriai-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

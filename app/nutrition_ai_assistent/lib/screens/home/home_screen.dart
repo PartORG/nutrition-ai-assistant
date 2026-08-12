@@ -51,11 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  final List<String> _titles = [
-    'Dashboard',
-    'Chat with NutriAI',
-    'Profile',
-  ];
+  final List<String> _titles = ['Dashboard', 'Chat with NutriAI', 'Profile'];
 
   Future<void> _handleSignOut() async {
     AppServices.instance.chat.disconnect();

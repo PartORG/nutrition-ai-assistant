@@ -51,7 +51,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final storage = AppServices.instance.storage;
       final api = AppServices.instance.api;
@@ -86,10 +89,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.message; _loading = false; });
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() { _error = 'Could not load data. Is the server running?'; _loading = false; });
+      setState(() {
+        _error = 'Could not load data. Is the server running?';
+        _loading = false;
+      });
     }
   }
 
@@ -188,15 +197,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Text(
                     '${_greeting()}, $firstName!',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white, fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '$saved recipes saved',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white70,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
                   ),
                 ],
               ),
@@ -204,7 +214,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white24, borderRadius: BorderRadius.circular(16),
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(Icons.eco, color: Colors.white, size: 32),
             ),
@@ -279,16 +290,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ── Static metadata for known nutrient keys ─────────────────────────────
-  static const _nutrientMeta = <String, (String label, IconData icon, String unit)>{
-    'sodium_mg':       ('Sodium',        Icons.grain,                         'mg'),
-    'carbs_g':         ('Carbs',         Icons.bakery_dining_outlined,        'g'),
-    'protein_g':       ('Protein',       Icons.fitness_center,                'g'),
-    'sugar_g':         ('Sugar',         Icons.water_drop_outlined,           'g'),
-    'fiber_g':         ('Fiber',         Icons.eco_outlined,                  'g'),
-    'fat_g':           ('Total Fat',     Icons.opacity,                       'g'),
-    'calories':        ('Calories',      Icons.local_fire_department_outlined,'kcal'),
-    'cholesterol_mg':  ('Cholesterol',   Icons.science_outlined,              'mg'),
-  };
+  static const _nutrientMeta =
+      <String, (String label, IconData icon, String unit)>{
+        'sodium_mg': ('Sodium', Icons.grain, 'mg'),
+        'carbs_g': ('Carbs', Icons.bakery_dining_outlined, 'g'),
+        'protein_g': ('Protein', Icons.fitness_center, 'g'),
+        'sugar_g': ('Sugar', Icons.water_drop_outlined, 'g'),
+        'fiber_g': ('Fiber', Icons.eco_outlined, 'g'),
+        'fat_g': ('Total Fat', Icons.opacity, 'g'),
+        'calories': ('Calories', Icons.local_fire_department_outlined, 'kcal'),
+        'cholesterol_mg': ('Cholesterol', Icons.science_outlined, 'mg'),
+      };
 
   Widget _buildDietaryGoalsCard(BuildContext context) {
     // ── Today's date string ───────────────────────────────────────────────
@@ -297,7 +309,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     Map<String, dynamic>? todayMap;
     for (final d in _nutritionDaily) {
-      if (d['date'] == todayStr) { todayMap = d; break; }
+      if (d['date'] == todayStr) {
+        todayMap = d;
+        break;
+      }
     }
     final hasToday = todayMap != null;
 
@@ -309,19 +324,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (cal <= 0) continue;
       daysWithData++;
       for (final key in _nutrientMeta.keys) {
-        dailySums[key] = (dailySums[key] ?? 0) + ((day[key] as num?)?.toDouble() ?? 0);
+        dailySums[key] =
+            (dailySums[key] ?? 0) + ((day[key] as num?)?.toDouble() ?? 0);
       }
     }
 
     double todayVal(String key) => (todayMap?[key] as num?)?.toDouble() ?? 0.0;
-    double avgVal(String key)   =>
+    double avgVal(String key) =>
         daysWithData > 0 ? (dailySums[key] ?? 0) / daysWithData : 0.0;
 
     // ── Decide which nutrients to display ────────────────────────────────
     // When user has profile constraints → use those; otherwise hardcoded fallback.
     final constraints = _dietaryConstraints;
-    final bool hasConstraints =
-        constraints != null && constraints.isNotEmpty;
+    final bool hasConstraints = constraints != null && constraints.isNotEmpty;
 
     // Each entry: (nutrientKey, goalValue, isMax)
     final List<(String, double, bool)> goalEntries;
@@ -341,15 +356,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else {
       // Hardcoded sensible defaults
       goalEntries = const [
-        ('sodium_mg',  2300.0, true),
-        ('carbs_g',     300.0, true),
-        ('protein_g',    50.0, false),
+        ('sodium_mg', 2300.0, true),
+        ('carbs_g', 300.0, true),
+        ('protein_g', 50.0, false),
       ];
     }
 
     // ── Row builder ───────────────────────────────────────────────────────
-    Widget statusValue(double val, double goal, bool isMax, String unit, bool hasData) {
-      if (!hasData) return const Text('—', style: TextStyle(fontSize: 11, color: Colors.grey));
+    Widget statusValue(
+      double val,
+      double goal,
+      bool isMax,
+      String unit,
+      bool hasData,
+    ) {
+      if (!hasData) {
+        return const Text(
+          '—',
+          style: TextStyle(fontSize: 11, color: Colors.grey),
+        );
+      }
       final met = isMax ? val <= goal : val >= goal;
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -357,7 +383,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             '${val.toStringAsFixed(0)}$unit',
             style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w600,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
               color: met ? AppColors.primaryDark : Colors.red.shade700,
             ),
           ),
@@ -395,18 +422,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: statusValue(todayVal(key), goal, isMax, unit, hasToday),
             ),
             Expanded(
-              child: statusValue(avgVal(key), goal, isMax, unit, daysWithData > 0),
+              child: statusValue(
+                avgVal(key),
+                goal,
+                isMax,
+                unit,
+                daysWithData > 0,
+              ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: (isMax ? Colors.orange : Colors.teal).withValues(alpha: 0.1),
+                color: (isMax ? Colors.orange : Colors.teal).withValues(
+                  alpha: 0.1,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 goalStr,
                 style: TextStyle(
-                  fontSize: 9, fontWeight: FontWeight.w600,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
                   color: isMax ? Colors.orange.shade800 : Colors.teal.shade700,
                 ),
               ),
@@ -427,19 +463,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: Text(
                     'Dietary Goals',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 if (hasConstraints)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.cardGreen,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Text(
                       'from profile',
-                      style: TextStyle(fontSize: 9, color: AppColors.primaryDark),
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: AppColors.primaryDark,
+                      ),
                     ),
                   ),
               ],
@@ -450,10 +494,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 const SizedBox(width: 90),
                 const Expanded(
-                  child: Text('today', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                  child: Text(
+                    'today',
+                    style: TextStyle(fontSize: 9, color: Colors.grey),
+                  ),
                 ),
                 const Expanded(
-                  child: Text('7d avg', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                  child: Text(
+                    '7d avg',
+                    style: TextStyle(fontSize: 9, color: Colors.grey),
+                  ),
                 ),
                 const SizedBox(width: 60),
               ],
@@ -482,22 +532,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('My Meals',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'My Meals',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Add information on consumed meals this week',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                 ),
               ],
             ),
             Row(
               children: [
-                const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
+                const Icon(
+                  Icons.edit_outlined,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(width: 4),
-                const Text('edit',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500)),
+                const Text(
+                  'edit',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ],
@@ -507,7 +572,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ─── Today's nutrition card ────────────────────────────────────────────────
-  Widget _buildNutritionCard(BuildContext context, Map<String, dynamic>? total) {
+  Widget _buildNutritionCard(
+    BuildContext context,
+    Map<String, dynamic>? total,
+  ) {
     // ── empty state ──────────────────────────────────────────────────────────
     if (total == null) {
       return Card(
@@ -518,22 +586,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Text(
                 "Today's Nutrition",
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Center(
                 child: Column(
                   children: [
-                    Icon(Icons.restaurant_outlined, size: 40, color: Colors.grey.shade400),
+                    Icon(
+                      Icons.restaurant_outlined,
+                      size: 40,
+                      color: Colors.grey.shade400,
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'No meals recorded today',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Ask the agent to save a recipe to track nutrition.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade400),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade400,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -546,22 +624,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    final kcal      = (total['calories']  as num?)?.toDouble() ?? 0;
-    final protein   = (total['protein_g'] as num?)?.toDouble() ?? 0;
-    final carbs     = (total['carbs_g']   as num?)?.toDouble() ?? 0;
-    final fat       = (total['fat_g']     as num?)?.toDouble() ?? 0;
-    final fiber     = (total['fiber_g']   as num?)?.toDouble() ?? 0;
-    final sodium    = (total['sodium_mg'] as num?)?.toDouble() ?? 0;
-    final sugar     = (total['sugar_g']   as num?)?.toDouble() ?? 0;
+    final kcal = (total['calories'] as num?)?.toDouble() ?? 0;
+    final protein = (total['protein_g'] as num?)?.toDouble() ?? 0;
+    final carbs = (total['carbs_g'] as num?)?.toDouble() ?? 0;
+    final fat = (total['fat_g'] as num?)?.toDouble() ?? 0;
+    final fiber = (total['fiber_g'] as num?)?.toDouble() ?? 0;
+    final sodium = (total['sodium_mg'] as num?)?.toDouble() ?? 0;
+    final sugar = (total['sugar_g'] as num?)?.toDouble() ?? 0;
     final mealCount = (total['meal_count'] as num?)?.toInt() ?? 0;
-    final macroSum  = protein + carbs + fat;
+    final macroSum = protein + carbs + fat;
 
     // ── Constraint-aware section ──────────────────────────────────────────
     final Map<String, double> todayValues = {
-      'calories':  kcal,    'protein_g': protein,
-      'carbs_g':   carbs,   'fat_g':     fat,
-      'fiber_g':   fiber,   'sodium_mg': sodium,
-      'sugar_g':   sugar,
+      'calories': kcal,
+      'protein_g': protein,
+      'carbs_g': carbs,
+      'fat_g': fat,
+      'fiber_g': fiber,
+      'sodium_mg': sodium,
+      'sugar_g': sugar,
     };
     final constraints = _dietaryConstraints;
     final List<Widget> constraintRows = [];
@@ -584,50 +665,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
         totalConstraints++;
         if (met) metCount++;
 
-        constraintRows.add(Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              Icon(icon, size: 13, color: Colors.grey.shade500),
-              const SizedBox(width: 5),
-              SizedBox(
-                width: 58,
-                child: Text(label,
+        constraintRows.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Icon(icon, size: 13, color: Colors.grey.shade500),
+                const SizedBox(width: 5),
+                SizedBox(
+                  width: 58,
+                  child: Text(
+                    label,
                     style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              Expanded(
-                child: Text(
-                  '${todayVal.toStringAsFixed(0)} $unit',
-                  style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w600,
-                    color: met ? AppColors.primaryDark : Colors.red.shade700,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-              Icon(
-                met ? Icons.check_circle_outline : Icons.warning_amber_rounded,
-                size: 13,
-                color: met ? Colors.green.shade500 : Colors.orange.shade700,
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: (isMax ? Colors.orange : Colors.teal).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${isMax ? '≤' : '≥'} ${goalVal.toStringAsFixed(0)} $unit',
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: isMax ? Colors.orange.shade800 : Colors.teal.shade700,
+                Expanded(
+                  child: Text(
+                    '${todayVal.toStringAsFixed(0)} $unit',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: met ? AppColors.primaryDark : Colors.red.shade700,
+                    ),
                   ),
                 ),
-              ),
-            ],
+                Icon(
+                  met
+                      ? Icons.check_circle_outline
+                      : Icons.warning_amber_rounded,
+                  size: 13,
+                  color: met ? Colors.green.shade500 : Colors.orange.shade700,
+                ),
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (isMax ? Colors.orange : Colors.teal).withValues(
+                      alpha: 0.1,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${isMax ? '≤' : '≥'} ${goalVal.toStringAsFixed(0)} $unit',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: isMax
+                          ? Colors.orange.shade800
+                          : Colors.teal.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ));
+        );
       }
     }
 
@@ -650,14 +745,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.cardGreen,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '$mealCount ${mealCount == 1 ? 'meal' : 'meals'} today',
-                    style: const TextStyle(fontSize: 11, color: AppColors.primaryDark),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primaryDark,
+                    ),
                   ),
                 ),
               ],
@@ -669,16 +770,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   width: 140,
                   height: 140,
                   child: macroSum > 0
-                      ? PieChart(PieChartData(
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 38,
-                          sections: [
-                            PieChartSectionData(value: protein, color: AppColors.primary,      title: '', radius: 28),
-                            PieChartSectionData(value: carbs,   color: Colors.orange,          title: '', radius: 28),
-                            PieChartSectionData(value: fat,     color: Colors.blue.shade300,   title: '', radius: 28),
-                          ],
-                        ))
-                      : const Center(child: Text('No data', style: TextStyle(color: Colors.grey))),
+                      ? PieChart(
+                          PieChartData(
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 38,
+                            sections: [
+                              PieChartSectionData(
+                                value: protein,
+                                color: AppColors.primary,
+                                title: '',
+                                radius: 28,
+                              ),
+                              PieChartSectionData(
+                                value: carbs,
+                                color: Colors.orange,
+                                title: '',
+                                radius: 28,
+                              ),
+                              PieChartSectionData(
+                                value: fat,
+                                color: Colors.blue.shade300,
+                                title: '',
+                                radius: 28,
+                              ),
+                            ],
+                          ),
+                        )
+                      : const Center(
+                          child: Text(
+                            'No data',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -686,7 +809,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -694,27 +820,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.local_fire_department, color: AppColors.primary, size: 16),
+                            const Icon(
+                              Icons.local_fire_department,
+                              color: AppColors.primary,
+                              size: 16,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '${kcal.toStringAsFixed(0)} kcal',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primaryDark, fontSize: 15,
+                                color: AppColors.primaryDark,
+                                fontSize: 15,
                               ),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _MacroRow(color: AppColors.primary,    label: 'Protein', grams: protein, total: macroSum),
+                      _MacroRow(
+                        color: AppColors.primary,
+                        label: 'Protein',
+                        grams: protein,
+                        total: macroSum,
+                      ),
                       const SizedBox(height: 6),
-                      _MacroRow(color: Colors.orange,        label: 'Carbs',   grams: carbs,   total: macroSum),
+                      _MacroRow(
+                        color: Colors.orange,
+                        label: 'Carbs',
+                        grams: carbs,
+                        total: macroSum,
+                      ),
                       const SizedBox(height: 6),
-                      _MacroRow(color: Colors.blue.shade300, label: 'Fat',     grams: fat,     total: macroSum),
+                      _MacroRow(
+                        color: Colors.blue.shade300,
+                        label: 'Fat',
+                        grams: fat,
+                        total: macroSum,
+                      ),
                       if (fiber > 0) ...[
                         const SizedBox(height: 6),
-                        _MacroRow(color: Colors.green.shade300, label: 'Fiber', grams: fiber, total: macroSum, showPct: false),
+                        _MacroRow(
+                          color: Colors.green.shade300,
+                          label: 'Fiber',
+                          grams: fiber,
+                          total: macroSum,
+                          showPct: false,
+                        ),
                       ],
                     ],
                   ),
@@ -722,7 +874,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             // ── Constraint status or sodium fallback ────────────────────
-            if (constraintRows.isNotEmpty || (showSodiumFallback && sodium > 0)) ...[
+            if (constraintRows.isNotEmpty ||
+                (showSodiumFallback && sodium > 0)) ...[
               const SizedBox(height: 12),
               const Divider(height: 1),
               const SizedBox(height: 10),
@@ -732,7 +885,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text(
                       'vs. Your Limits',
                       style: TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
                         color: Colors.grey.shade600,
                       ),
                     ),
@@ -740,7 +894,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text(
                       '$metCount/$totalConstraints met',
                       style: TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w600,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                         color: metCount == totalConstraints
                             ? Colors.green.shade600
                             : Colors.orange.shade700,
@@ -763,7 +918,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ] else if (showSodiumFallback && sodium > 0) ...[
                 Row(
                   children: [
-                    const Icon(Icons.water_drop_outlined, size: 14, color: Colors.grey),
+                    const Icon(
+                      Icons.water_drop_outlined,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Sodium: ${sodium.toStringAsFixed(0)} mg',
@@ -795,9 +954,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Text(
               'Daily Calorie Intake (Last 7 Days)',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -824,7 +983,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         interval: yInterval,
                         getTitlesWidget: (v, _) => Text(
                           v.toInt().toString(),
-                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
                         ),
                       ),
                     ),
@@ -833,30 +995,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         showTitles: true,
                         getTitlesWidget: (v, _) {
                           final i = v.toInt();
-                          if (i < 0 || i >= _nutritionDaily.length) return const SizedBox.shrink();
-                          final parts = (_nutritionDaily[i]['date'] as String? ?? '').split('-');
-                          final label = parts.length == 3 ? '${parts[1]}/${parts[2]}' : '';
+                          if (i < 0 || i >= _nutritionDaily.length) {
+                            return const SizedBox.shrink();
+                          }
+                          final parts =
+                              (_nutritionDaily[i]['date'] as String? ?? '')
+                                  .split('-');
+                          final label = parts.length == 3
+                              ? '${parts[1]}/${parts[2]}'
+                              : '';
                           return Padding(
                             padding: const EdgeInsets.only(top: 4),
-                            child: Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                            child: Text(
+                              label,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: Colors.grey,
+                              ),
+                            ),
                           );
                         },
                       ),
                     ),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: false,
                     horizontalInterval: yInterval,
-                    getDrawingHorizontalLine: (_) => const FlLine(
-                      color: Color(0xFFEEEEEE), strokeWidth: 1,
-                    ),
+                    getDrawingHorizontalLine: (_) =>
+                        const FlLine(color: Color(0xFFEEEEEE), strokeWidth: 1),
                   ),
                   borderData: FlBorderData(show: false),
                   barGroups: List.generate(_nutritionDaily.length, (i) {
-                    final cal = (_nutritionDaily[i]['calories'] as num?)?.toDouble() ?? 0.0;
+                    final cal =
+                        (_nutritionDaily[i]['calories'] as num?)?.toDouble() ??
+                        0.0;
                     return BarChartGroupData(
                       x: i,
                       barRods: [
@@ -864,9 +1043,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           toY: cal,
                           color: AppColors.primary,
                           width: 18,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
                           backDrawRodData: BackgroundBarChartRodData(
-                            show: true, toY: yMax, color: AppColors.cardGreen,
+                            show: true,
+                            toY: yMax,
+                            color: AppColors.cardGreen,
                           ),
                         ),
                       ],
@@ -885,9 +1068,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ─── Recent saved recipes ──────────────────────────────────────────────────
   Widget _buildRecentRecipes(BuildContext context) {
     void openSaved() => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SavedRecipesScreen()),
-        );
+      context,
+      MaterialPageRoute(builder: (_) => const SavedRecipesScreen()),
+    );
 
     return Card(
       child: Padding(
@@ -900,7 +1083,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: Text(
                     'Recently Saved Recipes',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 TextButton.icon(
@@ -910,13 +1095,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            ..._recentRecipes.map((recipe) => _RecipeTile(recipe: recipe, onTap: openSaved)),
+            ..._recentRecipes.map(
+              (recipe) => _RecipeTile(recipe: recipe, onTap: openSaved),
+            ),
           ],
         ),
       ),
@@ -937,7 +1127,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: AppColors.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.lightbulb_outline, color: AppColors.primary, size: 28),
+              child: const Icon(
+                Icons.lightbulb_outline,
+                color: AppColors.primary,
+                size: 28,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -947,13 +1141,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Text(
                     'Daily Tip',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold, color: AppColors.primaryDark,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryDark,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _tip,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -974,8 +1171,10 @@ class _MacroRow extends StatelessWidget {
   final bool showPct;
 
   const _MacroRow({
-    required this.color, required this.label,
-    required this.grams, required this.total,
+    required this.color,
+    required this.label,
+    required this.grams,
+    required this.total,
     this.showPct = true,
   });
 
@@ -984,7 +1183,11 @@ class _MacroRow extends StatelessWidget {
     final pct = total > 0 ? (grams / total * 100).round() : 0;
     return Row(
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 6),
         Text(label, style: const TextStyle(fontSize: 12)),
         const Spacer(),
@@ -1014,17 +1217,19 @@ class _RecipeTile extends StatelessWidget {
       if (diff == 1) return 'Yesterday';
       if (diff < 7) return '$diff days ago';
       return '${dt.day}/${dt.month}/${dt.year}';
-    } catch (_) { return ''; }
+    } catch (_) {
+      return '';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final name  = recipe['recipe_name'] as String? ?? '';
-    final savedAt = recipe['saved_at']  as String? ?? '';
-    final kcal    = (recipe['calories']  as num?)?.toDouble();
+    final name = recipe['recipe_name'] as String? ?? '';
+    final savedAt = recipe['saved_at'] as String? ?? '';
+    final kcal = (recipe['calories'] as num?)?.toDouble();
     final protein = (recipe['protein_g'] as num?)?.toDouble();
-    final carbs   = (recipe['carbs_g']   as num?)?.toDouble();
-    final fat     = (recipe['fat_g']     as num?)?.toDouble();
+    final carbs = (recipe['carbs_g'] as num?)?.toDouble();
+    final fat = (recipe['fat_g'] as num?)?.toDouble();
 
     return InkWell(
       onTap: onTap,
@@ -1037,28 +1242,66 @@ class _RecipeTile extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(top: 2),
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppColors.cardGreen, borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.restaurant_menu, color: AppColors.primary, size: 18),
+              decoration: BoxDecoration(
+                color: AppColors.cardGreen,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.restaurant_menu,
+                color: AppColors.primary,
+                size: 18,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   if (kcal != null)
-                    Wrap(spacing: 6, children: [
-                      _NutritionChip(label: '${kcal.toStringAsFixed(0)} kcal', color: AppColors.primary),
-                      if (protein != null) _NutritionChip(label: '${protein.toStringAsFixed(0)}g P', color: Colors.green.shade600),
-                      if (carbs   != null) _NutritionChip(label: '${carbs.toStringAsFixed(0)}g C',   color: Colors.orange),
-                      if (fat     != null) _NutritionChip(label: '${fat.toStringAsFixed(0)}g F',     color: Colors.blue.shade400),
-                    ])
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        _NutritionChip(
+                          label: '${kcal.toStringAsFixed(0)} kcal',
+                          color: AppColors.primary,
+                        ),
+                        if (protein != null)
+                          _NutritionChip(
+                            label: '${protein.toStringAsFixed(0)}g P',
+                            color: Colors.green.shade600,
+                          ),
+                        if (carbs != null)
+                          _NutritionChip(
+                            label: '${carbs.toStringAsFixed(0)}g C',
+                            color: Colors.orange,
+                          ),
+                        if (fat != null)
+                          _NutritionChip(
+                            label: '${fat.toStringAsFixed(0)}g F',
+                            color: Colors.blue.shade400,
+                          ),
+                      ],
+                    )
                   else
-                    const Text('No nutrition data', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const Text(
+                      'No nutrition data',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
                   const SizedBox(height: 2),
-                  Text(_formatDate(savedAt), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(
+                    _formatDate(savedAt),
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
@@ -1084,9 +1327,17 @@ class _NutritionChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

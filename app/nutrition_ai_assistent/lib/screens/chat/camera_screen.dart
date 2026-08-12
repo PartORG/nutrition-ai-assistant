@@ -125,9 +125,9 @@ class _CameraScreenState extends State<CameraScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _capturing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not capture photo: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not capture photo: $e')));
     }
   }
 

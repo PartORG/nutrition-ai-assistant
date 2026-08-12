@@ -1,0 +1,64 @@
+name: Flutter
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "app/**"
+      - ".github/workflows/flutter.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/flutter.yml"
+
+concurrency:
+  group: flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: app/nutrition_ai_assistent
+
+jobs:
+  analyze:
+    name: Analyze & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --set-exit-if-changed .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  build-web:
+    name: Build web
+    runs-on: ubuntu-latest
+    # Proves the app still compiles. Web is the cheapest target to build —
+    # an APK needs the Android toolchain and roughly triples the job time.
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build
+        run: flutter build web --release

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../main.dart';
-import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,8 +22,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadAccount() async {
     try {
-      final profileData = await AppServices.instance.api.get('/api')
-          as Map<String, dynamic>;
+      final profileData =
+          await AppServices.instance.api.get('/api') as Map<String, dynamic>;
       if (!mounted) return;
       final userMap = profileData['user'] as Map<String, dynamic>?;
       if (userMap != null) {
@@ -64,8 +63,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.person_outline,
-                        color: AppColors.primary),
+                    leading: const Icon(
+                      Icons.person_outline,
+                      color: AppColors.primary,
+                    ),
                     title: Row(
                       children: [
                         Text(_firstName.isNotEmpty ? _firstName : '—'),
@@ -78,11 +79,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.alternate_email,
-                        color: AppColors.primary),
-                    title: Text(
-                      _username.isNotEmpty ? _username : '—',
+                    leading: const Icon(
+                      Icons.alternate_email,
+                      color: AppColors.primary,
                     ),
+                    title: Text(_username.isNotEmpty ? _username : '—'),
                   ),
                 ],
               ),
@@ -97,22 +98,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const ListTile(
                     leading: Icon(Icons.eco, color: AppColors.primary),
                     title: Text('NutriAI'),
-                    trailing: Text('v1.0.0',
-                        style: TextStyle(color: Colors.grey)),
+                    trailing: Text(
+                      'v1.0.0',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.info_outline,
-                        color: AppColors.primary),
+                    leading: const Icon(
+                      Icons.info_outline,
+                      color: AppColors.primary,
+                    ),
                     title: const Text('About the app'),
-                    trailing: const Icon(Icons.chevron_right,
-                        color: Colors.grey),
+                    trailing: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey,
+                    ),
                     onTap: () => showAboutDialog(
                       context: context,
                       applicationName: 'NutriAI',
                       applicationVersion: '1.0.0',
-                      applicationIcon: const Icon(Icons.eco,
-                          color: AppColors.primary, size: 40),
+                      applicationIcon: const Icon(
+                        Icons.eco,
+                        color: AppColors.primary,
+                        size: 40,
+                      ),
                       children: [
                         const Text('Your Personal Nutrition AI Assistant'),
                       ],
@@ -128,8 +138,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.logout, color: AppColors.error),
-                title: const Text('Sign Out',
-                    style: TextStyle(color: AppColors.error)),
+                title: const Text(
+                  'Sign Out',
+                  style: TextStyle(color: AppColors.error),
+                ),
                 onTap: () async {
                   AppServices.instance.chat.disconnect();
                   await AppServices.instance.auth.logout();
@@ -157,9 +169,9 @@ class _SectionLabel extends StatelessWidget {
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: AppColors.primaryDark,
-              fontWeight: FontWeight.w600,
-            ),
+          color: AppColors.primaryDark,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
