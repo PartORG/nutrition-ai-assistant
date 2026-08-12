@@ -1,13 +1,20 @@
 """
-infrastructure.rag.smart_retriever - Intelligent query routing across vectorstores.
+infrastructure.rag.smart_retriever - Recipe retrieval with hybrid search + rerank.
 
-Routes queries to the appropriate vectorstore (recipes/nutrition/both) based on
-keyword matching, then retrieves with hybrid search (dense + BM25 via RRF) and
-an optional cross-encoder rerank over the merged candidates.
+Retrieves from the recipe corpus with dense (FAISS) + sparse (BM25) search fused
+by RRF, then an optional cross-encoder rerank over the candidates.
 
-Hybrid + rerank are controlled by the caller; when disabled (or when the
-underlying models/libraries are unavailable) it degrades to plain dense
-similarity search, preserving the original behaviour.
+This class used to also route between a recipe store and a nutrition store based
+on keyword matching. That routing is gone with the nutrition FAISS index: food
+composition is now an exact SQL lookup (see nutrition_facts_repo), so the whole
+fetch_k budget goes to recipes. Previously the router matched "both" for almost
+every query — the augmented query always contains "Nutrition Guidelines" — and
+spent half the candidate pool on nutrition rows that crowded recipes out of a
+small model's context.
+
+Hybrid and rerank are controlled by the caller; when disabled, or when the
+underlying models are unavailable, this degrades to plain dense similarity
+search.
 """
 
 from __future__ import annotations
@@ -28,93 +35,46 @@ logger = logging.getLogger(__name__)
 
 
 class SmartRetriever(Runnable):
-    """Routes queries to appropriate vector collections, then hybrid-retrieves."""
+    """Hybrid dense+sparse retrieval over the recipe corpus, with optional rerank."""
 
     def __init__(
         self,
         vectorstore_recipes,
-        vectorstore_nutrition,
         k: int = 14,
         use_hybrid: bool = False,
         reranker: Reranker | None = None,
         fetch_k: int | None = None,
     ):
         self.vectorstore_recipes = vectorstore_recipes
-        self.vectorstore_nutrition = vectorstore_nutrition
         self.k = k
         self.use_hybrid = use_hybrid
         self.reranker = reranker
         # Pull a larger candidate pool than `k` so the reranker has room to work.
         self.fetch_k = fetch_k or max(k * 2, 30)
-        self._bm25: dict[str, object] = {}
-        self._bm25_built: set[str] = set()
+        self._bm25 = None
+        self._bm25_built = False
 
     def invoke(
         self, input: dict | str, config: RunnableConfig = None,  # noqa: A002
     ) -> list[Document]:
         query = input.get("input", "") if isinstance(input, dict) else input
-        return self._smart_retrieve(query)
+        return self._retrieve(query)
 
-    def _bm25_for(self, name: str, vectorstore):
-        """Lazily build (and cache) a BM25 index for a store on first use."""
+    def _bm25_index(self):
+        """Lazily build (and cache) the BM25 index on first use."""
         if not self.use_hybrid:
             return None
-        if name not in self._bm25_built:
-            self._bm25[name] = build_bm25(docs_from_vectorstore(vectorstore), self.fetch_k)
-            self._bm25_built.add(name)
-        return self._bm25.get(name)
-
-    def _retrieve_store(self, name: str, vectorstore, query: str, fetch_k: int) -> list[Document]:
-        return hybrid_search(vectorstore, query, fetch_k, self._bm25_for(name, vectorstore))
-
-    def _smart_retrieve(self, query: str) -> list[Document]:
-        query_type = self._determine_query_type(query)
-
-        if query_type == "recipes":
-            results = self._retrieve_store(
-                "recipes", self.vectorstore_recipes, query, self.fetch_k,
+        if not self._bm25_built:
+            self._bm25 = build_bm25(
+                docs_from_vectorstore(self.vectorstore_recipes), self.fetch_k,
             )
-        elif query_type == "nutrition":
-            results = self._retrieve_store(
-                "nutrition", self.vectorstore_nutrition, query, self.fetch_k,
-            )
-        else:
-            half = self.fetch_k // 2 + 1
-            results_recipes = self._retrieve_store(
-                "recipes", self.vectorstore_recipes, query, half,
-            )
-            results_nutrition = self._retrieve_store(
-                "nutrition", self.vectorstore_nutrition, query, half,
-            )
-            results = results_recipes + results_nutrition
+            self._bm25_built = True
+        return self._bm25
 
-        # Rerank the merged candidates so the best chunks across both stores win.
+    def _retrieve(self, query: str) -> list[Document]:
+        results = hybrid_search(
+            self.vectorstore_recipes, query, self.fetch_k, self._bm25_index(),
+        )
         if self.reranker is not None:
             return self.reranker.rerank(query, results, self.k)
         return results[: self.k]
-
-    @staticmethod
-    def _determine_query_type(query: str) -> str:
-        query_lower = query.lower()
-
-        recipe_keywords = [
-            "recipe", "meal", "cook", "prepare", "make", "dish",
-            "breakfast", "lunch", "dinner", "snack",
-            "vegetarian", "vegan", "keto", "paleo",
-            "cuisine", "italian", "chinese", "indian",
-        ]
-        nutrition_keywords = [
-            "nutrition", "nutrient", "vitamin", "mineral",
-            "calorie", "protein", "carb", "fat", "fiber",
-            "healthy", "good source", "rich in",
-            "ingredient", "food",
-        ]
-
-        recipe_match = any(kw in query_lower for kw in recipe_keywords)
-        nutrition_match = any(kw in query_lower for kw in nutrition_keywords)
-
-        if recipe_match and not nutrition_match:
-            return "recipes"
-        elif nutrition_match and not recipe_match:
-            return "nutrition"
-        return "both"

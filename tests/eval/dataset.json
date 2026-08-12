@@ -1,30 +1,146 @@
 {
-  "_about": "Starter eval set. Relevance is a keyword proxy: a retrieved chunk counts as relevant if its text contains the 'expects' term(s). These labels are best-guesses for the recipe/nutrition CSVs and medical PDFs — REVIEW and refine them against your actual corpus so the numbers are meaningful. Use match_all:true to require every term.",
+  "_about": "Starter eval set. Relevance is a keyword proxy: a retrieved chunk counts as relevant if its text contains the 'expects' term(s). These labels are best-guesses for the recipe/nutrition CSVs and medical PDFs \u2014 REVIEW and refine them against your actual corpus so the numbers are meaningful. Use match_all:true to require every term.",
   "_fields": {
     "query": "the user query sent to the retriever",
-    "rag": "'recipe' (recipes + nutrition stores) or 'medical' (PDF constraints)",
+    "rag": "'recipe' (recipe corpus) or 'medical' (PDF constraints)",
     "expects": "term(s) a relevant chunk should contain (case-insensitive)",
     "match_all": "optional; require ALL terms instead of ANY (default false)"
   },
   "cases": [
-    {"query": "high protein chicken dinner", "rag": "recipe", "expects": ["chicken"]},
-    {"query": "quick vegetarian pasta recipe", "rag": "recipe", "expects": ["pasta"]},
-    {"query": "low sodium vegetable soup", "rag": "recipe", "expects": ["soup"]},
-    {"query": "healthy breakfast with eggs", "rag": "recipe", "expects": ["egg"]},
-    {"query": "grilled salmon with vegetables", "rag": "recipe", "expects": ["salmon"]},
-    {"query": "gluten free dessert", "rag": "recipe", "expects": ["gluten"]},
-    {"query": "keto avocado meal", "rag": "recipe", "expects": ["avocado"]},
-    {"query": "rice and beans bowl", "rag": "recipe", "expects": ["rice", "bean"]},
-    {"query": "how much protein is in beef", "rag": "recipe", "expects": ["beef", "protein"]},
-    {"query": "foods rich in fiber", "rag": "recipe", "expects": ["fiber"]},
-    {"query": "calories in a banana", "rag": "recipe", "expects": ["banana"]},
-    {"query": "tomato based vegetarian curry", "rag": "recipe", "expects": ["tomato"]},
-
-    {"query": "dietary constraints for diabetes", "rag": "medical", "expects": ["sugar", "diabet"]},
-    {"query": "foods to avoid with hypertension", "rag": "medical", "expects": ["sodium", "salt", "blood pressure"]},
-    {"query": "kidney disease diet recommendations", "rag": "medical", "expects": ["kidney", "potassium"]},
-    {"query": "celiac disease gluten free guidance", "rag": "medical", "expects": ["gluten", "celiac"]},
-    {"query": "nutrition for parkinsons disease", "rag": "medical", "expects": ["parkinson", "protein"]},
-    {"query": "heart healthy low fat diet", "rag": "medical", "expects": ["fat", "cholesterol"]}
+    {
+      "query": "high protein chicken dinner",
+      "rag": "recipe",
+      "expects": [
+        "chicken"
+      ]
+    },
+    {
+      "query": "quick vegetarian pasta recipe",
+      "rag": "recipe",
+      "expects": [
+        "pasta"
+      ]
+    },
+    {
+      "query": "low sodium vegetable soup",
+      "rag": "recipe",
+      "expects": [
+        "soup"
+      ]
+    },
+    {
+      "query": "healthy breakfast with eggs",
+      "rag": "recipe",
+      "expects": [
+        "egg"
+      ]
+    },
+    {
+      "query": "grilled salmon with vegetables",
+      "rag": "recipe",
+      "expects": [
+        "salmon"
+      ]
+    },
+    {
+      "query": "gluten free dessert",
+      "rag": "recipe",
+      "expects": [
+        "gluten"
+      ]
+    },
+    {
+      "query": "keto avocado meal",
+      "rag": "recipe",
+      "expects": [
+        "avocado"
+      ]
+    },
+    {
+      "query": "rice and beans bowl",
+      "rag": "recipe",
+      "expects": [
+        "rice",
+        "bean"
+      ]
+    },
+    {
+      "query": "how much protein is in beef",
+      "rag": "recipe",
+      "expects": [
+        "beef",
+        "protein"
+      ]
+    },
+    {
+      "query": "foods rich in fiber",
+      "rag": "recipe",
+      "expects": [
+        "fiber"
+      ]
+    },
+    {
+      "query": "calories in a banana",
+      "rag": "recipe",
+      "expects": [
+        "banana"
+      ]
+    },
+    {
+      "query": "tomato based vegetarian curry",
+      "rag": "recipe",
+      "expects": [
+        "tomato"
+      ]
+    },
+    {
+      "query": "dietary constraints for diabetes",
+      "rag": "medical",
+      "expects": [
+        "sugar",
+        "diabet"
+      ]
+    },
+    {
+      "query": "foods to avoid with hypertension",
+      "rag": "medical",
+      "expects": [
+        "sodium",
+        "salt",
+        "blood pressure"
+      ]
+    },
+    {
+      "query": "kidney disease diet recommendations",
+      "rag": "medical",
+      "expects": [
+        "kidney",
+        "potassium"
+      ]
+    },
+    {
+      "query": "celiac disease gluten free guidance",
+      "rag": "medical",
+      "expects": [
+        "gluten",
+        "celiac"
+      ]
+    },
+    {
+      "query": "nutrition for parkinsons disease",
+      "rag": "medical",
+      "expects": [
+        "parkinson",
+        "protein"
+      ]
+    },
+    {
+      "query": "heart healthy low fat diet",
+      "rag": "medical",
+      "expects": [
+        "fat",
+        "cholesterol"
+      ]
+    }
   ]
 }

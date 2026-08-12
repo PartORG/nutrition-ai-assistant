@@ -26,6 +26,7 @@ from domain.entities import (
 from domain.models import (
     DetectedIngredients,
     NutritionConstraints,
+    NutritionFact,
     Recipe,
     SafetyCheckResult,
     UserIntent,
@@ -68,6 +69,27 @@ class SafetyFilterPort(Protocol):
         constraints: NutritionConstraints,
         intent: UserIntent,
     ) -> SafetyCheckResult: ...
+
+
+@runtime_checkable
+class NutritionFactsRepository(Protocol):
+    """Look up reference food composition (the nutrition_facts table).
+
+    Exact and structured, unlike the RAG ports above — "how much protein is in
+    cornstarch" has one right answer, not a ranked list of plausible ones.
+    """
+
+    async def lookup(self, food_name: str) -> NutritionFact | None:
+        """Best match for a food name, or None. Falls back to fuzzy search."""
+        ...
+
+    async def search(self, query: str, limit: int = 5) -> list[NutritionFact]: ...
+
+    async def top_by_nutrient(
+        self, nutrient: str, limit: int = 10,
+    ) -> list[NutritionFact]:
+        """Foods with the highest value of `nutrient`, highest first."""
+        ...
 
 
 @runtime_checkable

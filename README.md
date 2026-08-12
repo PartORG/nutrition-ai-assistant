@@ -399,6 +399,33 @@ and almonds. Can you suggest a creative recipe?
 - **Private medical data not included:** Medical research PDFs used by the Medical RAG are private and not committed to this repository.
 - **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. Manage them with `nutriai-index` — see [Vector index management](#vector-index-management) below.
 
+### Nutrition facts are a table, not a vector index
+
+Food composition lives in the `nutrition_facts` SQL table (8,789 foods, 74
+nutrients each), seeded automatically from `data/cleaned_nutrition.csv` on first
+startup. It replaced a 36 MB FAISS index that embedded each row as ~25 lines of
+near-identical template — where the only token distinguishing one food from
+another was its name, and nothing ever filtered on the typed values.
+
+The agent's `lookup_nutrition` tool queries it, so "how much protein is in
+cornstarch" returns the exact row instead of the model's recollection, and
+"foods highest in iron" is an `ORDER BY` rather than an approximate
+nearest-neighbour search.
+
+**Name matching is lexical, not semantic.** FTS5 matches words and prefixes:
+`corn` finds Cornstarch, `thyme` finds "Spices, dried, thyme". It does *not*
+handle synonyms or typos — `cornflour` finds nothing, because no lexical index
+relates it to `Cornstarch`. When the match isn't exact the tool says so and
+lists alternatives, rather than silently reporting the wrong food's macros. If
+synonym handling turns out to matter, the cheap fix is a small synonym table,
+not reintroducing embeddings.
+
+Units are stripped and normalised per column at load, with the canonical unit
+recorded in `nutrition_facts_units`. Values whose unit can't be converted
+(7 rows store vitamin A in mcg where the column is IU, and that conversion
+depends on the compound) are stored as NULL rather than as a confident wrong
+number.
+
 ### Vector index management
 
 ```bash

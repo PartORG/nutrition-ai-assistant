@@ -112,7 +112,7 @@ def main():
             _print_table(
                 configs,
                 lambda uh, rr: SmartRetriever(
-                    rag.vectorstore_recipes, rag.vectorstore_nutrition,
+                    rag.vectorstore_recipes,
                     k=EVAL_RETURN_N, use_hybrid=uh, reranker=rr, fetch_k=cfg.rag_fetch_k,
                 ),
                 recipe_cases,

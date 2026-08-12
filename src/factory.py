@@ -33,6 +33,7 @@ from agent.prompt import build_system_prompt
 from agent.tools.analyze_image import AnalyzeImageTool
 from agent.tools.crisis_support import CrisisSupportTool
 from agent.tools.general_chat import GeneralChatTool
+from agent.tools.lookup_nutrition import LookupNutritionTool
 from agent.tools.nutrition_status import NutritionStatusTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.safety_guard import SafetyGuardTool
@@ -57,6 +58,8 @@ from infrastructure.persistence.connection import AsyncSQLiteConnection
 from infrastructure.persistence.conversation_repo import SQLiteConversationRepository
 from infrastructure.persistence.medical_repo import SQLiteMedicalRepository
 from infrastructure.persistence.migrations import run_migrations
+from infrastructure.persistence.nutrition_facts_repo import SQLiteNutritionFactsRepository
+from infrastructure.persistence.nutrition_facts_seed import seed_nutrition_facts
 from infrastructure.persistence.nutrition_repo import SQLiteNutritionRepository
 from infrastructure.persistence.profile_repo import SQLiteProfileRepository
 from infrastructure.persistence.recipe_repo import SQLiteRecipeRepository
@@ -97,6 +100,12 @@ class ServiceFactory:
 
         await run_migrations(self._connection)
         logger.info("Database migrations complete")
+
+        # Reference food composition. Idempotent — a no-op once populated.
+        nutrition_csv = self._config.data_dir / "cleaned_nutrition.csv"
+        async with self._connection.acquire() as conn:
+            rows = await seed_nutrition_facts(conn, nutrition_csv)
+        logger.info("Nutrition facts table ready (%d foods)", rows)
 
         # ── Build shared LLM-backed components ONCE ──────────────────
         cfg = self._config
@@ -269,6 +278,7 @@ class ServiceFactory:
         # Register tools
         nutrition_repo = SQLiteNutritionRepository(self._connection)
         medical_repo = SQLiteMedicalRepository(self._connection)
+        facts_repo = SQLiteNutritionFactsRepository(self._connection)
 
         registry = ToolRegistry()
         registry.register(SearchRecipesTool(rec_service))
@@ -277,6 +287,7 @@ class ServiceFactory:
         registry.register(AnalyzeImageTool(image_service))
         registry.register(GeneralChatTool())
         registry.register(NutritionStatusTool(nutrition_repo, medical_repo))
+        registry.register(LookupNutritionTool(facts_repo))
         registry.register(SafetyGuardTool())
         registry.register(CrisisSupportTool())
 

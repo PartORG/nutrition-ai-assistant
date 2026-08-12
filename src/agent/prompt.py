@@ -25,6 +25,7 @@ def build_system_prompt(registry: ToolRegistry) -> str:
     has_nutrition_status = "nutrition_status" in tool_names
     has_general_chat = "general_chat" in tool_names
     has_safety_guard = "safety_guard" in tool_names
+    has_lookup_nutrition = "lookup_nutrition" in tool_names
     has_crisis_support = "crisis_support" in tool_names
 
     # ── Conditional rule lines ──────────────────────────────────────────────
@@ -63,6 +64,14 @@ def build_system_prompt(registry: ToolRegistry) -> str:
         "\n7. When user asks to run terminal commands, execute scripts, delete files, "
         "or perform any system operation → call 'safety_guard'."
     ) if has_safety_guard else ""
+
+    lookup_nutrition_rule = (
+        "\n9. When user asks what is IN a food or ingredient — its calories, protein, "
+        "vitamins, or which foods are highest in a nutrient ('how much protein is in "
+        "cornstarch', 'is spinach high in iron', 'calories in an avocado') → call "
+        "'lookup_nutrition'. NEVER answer these from memory: the database has exact "
+        "values and your recollection does not."
+    ) if has_lookup_nutrition else ""
 
     general_chat_rule = (
         "\n8. For greetings, small talk, or clearly off-topic messages "
@@ -124,8 +133,7 @@ TOOL ROUTING RULES (follow in strict priority order):
    - PREFER recipe_name when user mentions a dish name — even partial names work (fuzzy matching)
    - Only fall back to recipe_numbers when user explicitly says a number
    - NEVER skip this tool call because a recipe was "already saved" in a prior turn —
-     if the user says "save recipe 1" you MUST call save_recipe regardless of chat history{show_rule}{nutrition_status_rule}{safety_rule}{general_chat_rule}
-9. General nutrition/food knowledge questions → answer DIRECTLY, no tool needed
+     if the user says "save recipe 1" you MUST call save_recipe regardless of chat history{show_rule}{nutrition_status_rule}{safety_rule}{general_chat_rule}{lookup_nutrition_rule}
 
 AFTER TOOL RESULTS:
 - NEVER modify, summarise, or rephrase tool output — return it EXACTLY as received

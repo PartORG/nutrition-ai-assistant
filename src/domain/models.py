@@ -115,6 +115,38 @@ class NutritionValues:
     saturated_fat_g: float | None = None
 
 
+@dataclass(frozen=True)
+class NutritionFact:
+    """Reference composition for one food, from the nutrition_facts table.
+
+    Distinct from NutritionValues (what a recipe contains) and from
+    NutritionHistory (what a user ate). This is the lookup table: "what is in
+    100 g of cornstarch".
+
+    `nutrients` maps column name -> value in `units[column]`, carrying all 74
+    measured nutrients rather than only the eight macros, so queries like
+    "highest in iron" are answerable.
+    """
+    name: str
+    serving_size: str = ""
+    nutrients: dict[str, float] = field(default_factory=dict)
+    units: dict[str, str] = field(default_factory=dict)
+
+    def get(self, nutrient: str) -> float | None:
+        return self.nutrients.get(nutrient)
+
+    def unit_for(self, nutrient: str) -> str:
+        return self.units.get(nutrient, "")
+
+    def format_amount(self, nutrient: str) -> str:
+        """'12.4 g', or '—' when the dataset has no value for this nutrient."""
+        value = self.get(nutrient)
+        if value is None:
+            return "—"
+        unit = self.unit_for(nutrient)
+        return f"{value:g} {unit}".strip()
+
+
 # ---------------------------------------------------------------------------
 # Recipe
 # ---------------------------------------------------------------------------

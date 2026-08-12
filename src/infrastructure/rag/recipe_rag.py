@@ -23,6 +23,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
 from langchain_core.documents import Document
 
+from infrastructure.config import DEFAULT_EMBEDDING_MODEL
 from infrastructure.rag.base_rag import BaseRAG
 from infrastructure.rag.smart_retriever import SmartRetriever
 
@@ -30,7 +31,11 @@ logger = logging.getLogger(__name__)
 
 
 class RecipeNutritionRAG(BaseRAG):
-    """RAG system for personalized recipe recommendations with dual vectorstores."""
+    """RAG system for personalized recipe recommendations over the recipe corpus.
+
+    Nutrition facts moved to the nutrition_facts SQL table — see
+    infrastructure.persistence.nutrition_facts_repo.
+    """
 
     LARGE_FILE_THRESHOLD_MB = 50
 
@@ -188,7 +193,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         groq_api_key: str | None = None,
         use_hybrid: bool = False,
         reranker=None,
-        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
+        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         embeddings=None,
     ):
         # Only Ollama uses the native format="json" parameter.
@@ -214,7 +219,6 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         self.k = k
 
         self.vectorstore_recipes: FAISS | None = None
-        self.vectorstore_nutrition: FAISS | None = None
         self.smart_retriever: SmartRetriever | None = None
 
     # ================================================================
@@ -312,7 +316,6 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             ("cleaned_recipes.csv", self._load_recipes_csv, "recipes"),
             ("cleaned_recipes_data_sample.csv", self._load_recipes_data_sample_csv, "recipes"),
             ("cleaned_healthy_meals.csv", self._load_healthy_meals_csv, "recipes"),
-            ("cleaned_nutrition.csv", self._load_nutrition_csv, "nutrition"),
         ]
 
         threshold_bytes = self.LARGE_FILE_THRESHOLD_MB * 1024 * 1024
@@ -341,18 +344,12 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         recipes1 = all_loaded.get("cleaned_recipes.csv", [])
         recipes2 = all_loaded.get("cleaned_recipes_data_sample.csv", [])
         meals = all_loaded.get("cleaned_healthy_meals.csv", [])
-        nutrition = all_loaded.get("cleaned_nutrition.csv", [])
 
-        for doc in recipes1 + recipes2 + meals:
+        all_docs = recipes1 + recipes2 + meals
+        for doc in all_docs:
             doc.metadata["_collection"] = "recipes"
-        for doc in nutrition:
-            doc.metadata["_collection"] = "nutrition"
 
-        all_docs = recipes1 + recipes2 + meals + nutrition
-        logger.info(
-            "Loaded documents — Recipes/Meals: %d, Nutrition: %d",
-            len(recipes1) + len(recipes2) + len(meals), len(nutrition),
-        )
+        logger.info("Loaded %d recipe/meal documents", len(all_docs))
         return all_docs
 
     def _ingest_single_file(self, file_path: str) -> list[Document]:
@@ -365,7 +362,6 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
             "cleaned_recipes.csv": self._load_recipes_csv,
             "cleaned_recipes_data_sample.csv": self._load_recipes_data_sample_csv,
             "cleaned_healthy_meals.csv": self._load_healthy_meals_csv,
-            "cleaned_nutrition.csv": self._load_nutrition_csv,
         }
         loader_fn = loader_map.get(path.name)
         if loader_fn is None:
@@ -378,9 +374,7 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
     # ================================================================
 
     def _vectorstore_exists(self) -> bool:
-        recipes_path = self.vectorstore_path / "recipes_and_meals_db"
-        nutrition_path = self.vectorstore_path / "nutrition_facts_db"
-        return recipes_path.exists() and nutrition_path.exists()
+        return (self.vectorstore_path / "recipes_and_meals_db").exists()
 
     def _index_dimension(self) -> int | None:
         """Both stores share an embedding model, so the recipes store speaks for both."""
@@ -395,10 +389,8 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
 
     def _embeddings_match_index(self) -> bool:
         """Check BOTH stores — the base hook only looks at self.vectorstore."""
-        for vectorstore in (self.vectorstore_recipes, self.vectorstore_nutrition):
-            if vectorstore is not None and not self._index_dim_ok(vectorstore):
-                return False
-        return True
+        store = self.vectorstore_recipes
+        return store is None or self._index_dim_ok(store)
 
     def _prepare_rebuild(self) -> None:
         """Wipe both stores + resumable batch-meta so a model switch re-embeds cleanly.
@@ -408,62 +400,38 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         """
         import shutil
 
-        for sub in ("recipes_and_meals_db", "nutrition_facts_db"):
-            target = self.vectorstore_path / sub
-            if target.exists():
-                shutil.rmtree(target, ignore_errors=True)
+        target = self.vectorstore_path / "recipes_and_meals_db"
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
         for meta in self.vectorstore_path.glob("*_batch_meta.json"):
             meta.unlink(missing_ok=True)
         self.vectorstore_recipes = None
-        self.vectorstore_nutrition = None
         logger.info("Cleared recipe/nutrition indices for a clean rebuild")
 
     def _build_vectorstore(self, documents: list[Document]) -> None:
-        recipe_docs = [d for d in documents if d.metadata.get("_collection") == "recipes"]
-        nutrition_docs = [d for d in documents if d.metadata.get("_collection") == "nutrition"]
-
-        logger.info("Building FAISS indices (recipes=%d, nutrition=%d)", len(recipe_docs), len(nutrition_docs))
+        logger.info("Building FAISS index (recipes=%d)", len(documents))
 
         self.vectorstore_recipes = FAISS.from_documents(
-            documents=recipe_docs,
-            embedding=self.embeddings,
-            distance_strategy=DistanceStrategy.COSINE,
-        )
-        self.vectorstore_nutrition = FAISS.from_documents(
-            documents=nutrition_docs,
+            documents=documents,
             embedding=self.embeddings,
             distance_strategy=DistanceStrategy.COSINE,
         )
 
         self.vectorstore_path.mkdir(parents=True, exist_ok=True)
         self.vectorstore_recipes.save_local(str(self.vectorstore_path / "recipes_and_meals_db"))
-        self.vectorstore_nutrition.save_local(str(self.vectorstore_path / "nutrition_facts_db"))
         logger.info("Vectorstores saved to %s", self.vectorstore_path)
 
     def _load_vectorstore(self) -> None:
-        recipes_path = self.vectorstore_path / "recipes_and_meals_db"
-        nutrition_path = self.vectorstore_path / "nutrition_facts_db"
-
         self.vectorstore_recipes = FAISS.load_local(
-            folder_path=str(recipes_path),
+            folder_path=str(self.vectorstore_path / "recipes_and_meals_db"),
             embeddings=self.embeddings,
             allow_dangerous_deserialization=True,
         )
-        self.vectorstore_nutrition = FAISS.load_local(
-            folder_path=str(nutrition_path),
-            embeddings=self.embeddings,
-            allow_dangerous_deserialization=True,
-        )
-        logger.info(
-            "Vectorstores loaded — Recipes: %d, Nutrition: %d",
-            self.vectorstore_recipes.index.ntotal,
-            self.vectorstore_nutrition.index.ntotal,
-        )
+        logger.info("Vectorstore loaded — Recipes: %d", self.vectorstore_recipes.index.ntotal)
 
     def _setup_retriever(self) -> None:
         self.smart_retriever = SmartRetriever(
             vectorstore_recipes=self.vectorstore_recipes,
-            vectorstore_nutrition=self.vectorstore_nutrition,
             k=self.k,
             use_hybrid=self.use_hybrid,
             reranker=self.reranker,
@@ -493,12 +461,9 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
         if self.embeddings is None:
             raise RuntimeError("Call initialize() before _ingest_large_csv()")
 
-        if collection == "recipes":
-            target = self.vectorstore_recipes
-        elif collection == "nutrition":
-            target = self.vectorstore_nutrition
-        else:
+        if collection != "recipes":
             raise ValueError(f"Unknown collection: {collection}")
+        target = self.vectorstore_recipes
 
         meta = self._get_batch_meta(csv_path)
         start_offset = meta.get("rows_indexed", 0)
@@ -536,14 +501,9 @@ Generate JSON with the exact number of recipes requested (default 3), adapting r
                 else:
                     target.merge_from(new_store)
 
-                if collection == "recipes":
-                    self.vectorstore_recipes = target
-                    self.vectorstore_path.mkdir(parents=True, exist_ok=True)
-                    target.save_local(str(self.vectorstore_path / "recipes_and_meals_db"))
-                else:
-                    self.vectorstore_nutrition = target
-                    self.vectorstore_path.mkdir(parents=True, exist_ok=True)
-                    target.save_local(str(self.vectorstore_path / "nutrition_facts_db"))
+                self.vectorstore_recipes = target
+                self.vectorstore_path.mkdir(parents=True, exist_ok=True)
+                target.save_local(str(self.vectorstore_path / "recipes_and_meals_db"))
 
             rows_processed += len(chunk_df)
             batch_num += 1
@@ -757,70 +717,6 @@ Preparation: {row['cooking_method']} (Prep: {row['prep_time_min']}min, Cook: {ro
         logger.debug("Loaded %d documents from healthy_meals CSV", len(documents))
         return documents
 
-    def _load_nutrition_csv(self, csv_path_or_df) -> list[Document]:
-        if isinstance(csv_path_or_df, pd.DataFrame):
-            df = csv_path_or_df
-        else:
-            df = pd.read_csv(csv_path_or_df)
-
-        documents = []
-
-        def parse_numeric(val):
-            if pd.isna(val):
-                return None
-            try:
-                return float(re.sub(r"[^\d.]", "", str(val)))
-            except Exception:
-                return None
-
-        for _idx, row in df.iterrows():
-            if pd.isna(row["name"]):
-                continue
-
-            text = f"""Ingredient: {row['name']} (per {row['serving_size']})
-
-Macronutrients:
-- Calories: {row['calories']} kcal
-- Protein: {row['protein']}
-- Carbohydrates: {row['carbohydrate']}
-- Total Fat: {row['total_fat']}
-- Fiber: {row['fiber']}
-- Sugars: {row['sugars']}
-
-Key Vitamins:
-- Vitamin A: {row['vitamin_a']}
-- Vitamin C: {row['vitamin_c']}
-- Vitamin D: {row['vitamin_d']}
-- Vitamin B12: {row['vitamin_b12']}
-- Folate: {row['folate']}
-
-Key Minerals:
-- Calcium: {row['calcium']}
-- Iron: {row['irom']}
-- Magnesium: {row['magnesium']}
-- Sodium: {row['sodium']}
-- Potassium: {row['potassium']}
-
-Cholesterol: {row['cholesterol']} | Saturated Fat: {row['saturated_fat']}
-"""
-            metadata = {
-                "doc_type": "nutrition_fact",
-                "source_file": "cleaned_nutrition",
-                "food_name": row["name"],
-                "serving_size": row["serving_size"],
-                "calories": parse_numeric(row["calories"]),
-                "protein_g": parse_numeric(row["protein"]),
-                "carbs_g": parse_numeric(row["carbohydrate"]),
-                "fat_g": parse_numeric(row["total_fat"]),
-                "fiber_g": parse_numeric(row["fiber"]),
-                "sugar_g": parse_numeric(row["sugars"]),
-                "allergens": self._detect_allergens(row["name"]),
-            }
-            documents.append(Document(page_content=text, metadata=metadata))
-
-        logger.debug("Loaded %d documents from nutrition CSV", len(documents))
-        return documents
-
     # ================================================================
     # Domain-specific public methods
     # ================================================================
@@ -837,10 +733,9 @@ Cholesterol: {row['cholesterol']} | Saturated Fat: {row['saturated_fat']}
 
     def get_stats(self) -> dict[str, Any]:
         stats = super().get_stats()
-        if self.vectorstore_recipes and self.vectorstore_nutrition:
+        if self.vectorstore_recipes:
             stats["vectorstores"] = {
                 "recipes_and_meals": {"vectors": self.vectorstore_recipes.index.ntotal},
-                "nutrition_facts": {"vectors": self.vectorstore_nutrition.index.ntotal},
             }
         stats["k"] = self.k
         stats["data_folder"] = str(self.data_folder)
