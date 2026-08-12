@@ -17,7 +17,9 @@ Run:
     RAG_FETCH_K=40 uv run python tests/eval/run_eval.py     # tune candidate pool
     EMBEDDING_MODEL=BAAI/bge-base-en-v1.5 uv run python tests/eval/run_eval.py
 
-Relevance is a keyword proxy — refine tests/eval/dataset.json against your corpus.
+Relevance comes from labelled document IDs in tests/eval/dataset.json. nDCG@10
+is the headline number and carries a 95% bootstrap CI — with a few dozen queries
+a 2-point difference is noise, and the previous harness could not say so.
 """
 
 from __future__ import annotations
@@ -32,7 +34,15 @@ sys.path.insert(0, str(_ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from langchain_huggingface import HuggingFaceEmbeddings  # noqa: E402
-from metrics import first_hit_rank, mrr, recall_at_k  # noqa: E402
+from metrics import (  # noqa: E402
+    bootstrap_ci,
+    mean,
+    ndcg_at_k,
+    recall_at_k,
+    reciprocal_rank,
+    relevance_by_id,
+    relevance_by_keyword,
+)
 
 from infrastructure.config import Settings  # noqa: E402
 from infrastructure.rag.medical_rag import MedicalRAG  # noqa: E402
@@ -50,23 +60,56 @@ def _load_cases():
 
 
 def _score(retriever, cases):
-    ranks = []
+    """Per-query metric vectors. Kept per-query so a CI can be bootstrapped."""
+    per_query: dict[str, list[float]] = {
+        "ndcg": [], "rr": [], **{f"recall@{k}": [] for k in K_VALUES},
+    }
     for case in cases:
         docs = retriever.invoke(case["query"])
-        texts = [d.page_content for d in docs]
-        ranks.append(first_hit_rank(texts, case["expects"], case.get("match_all", False)))
-    return ranks
+
+        gold = case.get("relevant_ids")
+        if gold:
+            ids = [d.metadata.get("recipe_name", "") for d in docs]
+            relevance = relevance_by_id(ids, gold)
+            total_relevant = len(gold)
+        else:
+            # Legacy keyword proxy. total_relevant is unknown, so recall is
+            # measured against what was retrieved — a weaker, flattering number.
+            relevance = relevance_by_keyword(
+                [d.page_content for d in docs],
+                case.get("expects", []),
+                case.get("match_all", False),
+            )
+            total_relevant = None
+
+        per_query["ndcg"].append(ndcg_at_k(relevance, EVAL_RETURN_N, total_relevant))
+        per_query["rr"].append(reciprocal_rank(relevance))
+        for k in K_VALUES:
+            per_query[f"recall@{k}"].append(recall_at_k(relevance, k, total_relevant))
+    return per_query
 
 
 def _print_table(configs, make_retriever, cases):
-    cols = "".join(f"{'recall@' + str(k):>12}" for k in K_VALUES)
-    header = f"{'config':<16}{cols}{'MRR':>10}"
+    """nDCG with a 95% bootstrap CI, then recall@k and MRR for continuity."""
+    ndcg_label = f"nDCG@{EVAL_RETURN_N}"
+    cols = "".join(f"{'recall@' + str(k):>11}" for k in K_VALUES)
+    header = f"{'config':<16}{ndcg_label:>10}{'95% CI':>18}{cols}{'MRR':>9}"
     print(header)
     print("-" * len(header))
+
     for name, use_hybrid, reranker in configs:
-        ranks = _score(make_retriever(use_hybrid, reranker), cases)
-        cells = "".join(f"{recall_at_k(ranks, k):>12.3f}" for k in K_VALUES)
-        print(f"{name:<16}{cells}{mrr(ranks):>10.3f}")
+        scores = _score(make_retriever(use_hybrid, reranker), cases)
+        lo, hi = bootstrap_ci(scores["ndcg"])
+        cells = "".join(f"{mean(scores[f'recall@{k}']):>11.3f}" for k in K_VALUES)
+        print(
+            f"{name:<16}{mean(scores['ndcg']):>10.3f}"
+            f"{f'[{lo:.3f}, {hi:.3f}]':>18}{cells}{mean(scores['rr']):>9.3f}"
+        )
+
+    print(
+        f"\n  n={len(cases)} queries. Overlapping CIs mean the difference is not "
+        f"distinguishable from noise at this sample size."
+    )
 
 
 def main():
@@ -99,6 +142,7 @@ def main():
             vectorstore_path=str(cfg.recipes_nutrition_vector_path),
             embedding_model=cfg.embedding_model,
             embeddings=embeddings,
+            include_synthetic_meals=cfg.rag_include_synthetic_meals,
             llm_provider=cfg.llm_provider,
             ollama_base_url=cfg.ollama_base_url,
             openai_api_key=cfg.openai_api_key,
@@ -145,8 +189,12 @@ def main():
                 medical_cases,
             )
 
-    print("\nNote: relevance is a keyword proxy (see dataset.json). Compare rows "
-          "RELATIVELY — higher recall@5 / MRR for hybrid+rerank means the upgrade helps.")
+    print(
+        "\nRecipe relevance is by labelled document ID; the medical cases still use "
+        "the keyword proxy because those PDFs are private. Read differences between "
+        "rows, not absolute values — and only trust a difference whose CIs do not "
+        "overlap."
+    )
 
 
 if __name__ == "__main__":

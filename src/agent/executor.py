@@ -149,9 +149,13 @@ class AgentExecutor:
         # When the message carries an [IMAGE:...] tag we invoke analyze_image
         # directly. This is more reliable than prompt instructions because the
         # LLM may otherwise pick search_recipes when text sounds recipe-like.
+        if "[IMAGE:" in user_input:
+            await ctx.progress("tool", "Looking at your photo…")
         image_output = await _route_image_if_present(user_input, ctx, self._tools)
         if image_output is not None:
             return await self._finalize(ctx, user_input, image_output)
+
+        await ctx.progress("thinking", "Working on it…")
 
         messages = list(self._memory.messages) + [HumanMessage(content=user_input)]
         try:
@@ -171,6 +175,7 @@ class AgentExecutor:
             return await self._finalize(ctx, user_input, error_output)
 
         output = self._extract_output(result.get("messages", []))
+        await ctx.progress("finalizing", "Almost there…")
         return await self._finalize(ctx, user_input, output)
 
     @staticmethod

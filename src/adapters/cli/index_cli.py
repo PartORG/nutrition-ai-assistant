@@ -59,6 +59,7 @@ def _build_rag(target: str, cfg: Settings):
         vectorstore_path=str(cfg.recipes_nutrition_vector_path),
         model_name=cfg.active_llm_model,
         embedding_model=cfg.embedding_model,
+        include_synthetic_meals=cfg.rag_include_synthetic_meals,
         ollama_base_url=cfg.ollama_base_url,
         llm_provider=cfg.llm_provider,
         openai_api_key=cfg.openai_api_key,

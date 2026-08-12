@@ -32,6 +32,24 @@ class SessionContext:
     request_id: str = field(default_factory=lambda: uuid4().hex)
     scratch: dict[str, Any] = field(default_factory=dict)
 
+    # Optional async callback(stage, detail) for surfacing progress to a live
+    # client. Set by the WebSocket adapter; None everywhere else, so nothing
+    # in the application or domain layers depends on a transport being present.
+    on_progress: Any = None
+
+    async def progress(self, stage: str, detail: str = "") -> None:
+        """Report progress if a client is listening. Never raises.
+
+        A turn can run for tens of seconds; without this the UI cannot tell
+        working from hung. Failures here must not abort the actual work.
+        """
+        if self.on_progress is None:
+            return
+        try:
+            await self.on_progress(stage, detail)
+        except Exception:  # pragma: no cover - progress is best-effort
+            pass
+
     def new_request(self) -> None:
         """Reset per-request state for a new request within the same session.
 

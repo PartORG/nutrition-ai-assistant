@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../main.dart';
+import '../../services/chat_ws_service.dart';
 import '../../theme/app_theme.dart';
 import 'camera_screen.dart';
 
@@ -12,7 +13,16 @@ class ChatMessage {
   final bool isUser;
   final String? imagePath;
 
-  ChatMessage({required this.text, required this.isUser, this.imagePath});
+  /// Errors are rendered distinctly — the server now marks them as such, so
+  /// a failure is no longer shown as if the assistant had said it.
+  final bool isError;
+
+  ChatMessage({
+    required this.text,
+    required this.isUser,
+    this.imagePath,
+    this.isError = false,
+  });
 }
 
 class ChatScreen extends StatefulWidget {
@@ -36,6 +46,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _connected = false;
   bool _connecting = false;
   bool _waitingForResponse = false;
+  String? _statusDetail;
   bool _uploadingImage = false;
 
   // Server path of an uploaded image waiting to be sent with the next message
@@ -70,19 +81,37 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     try {
       await AppServices.instance.chat.connect(
-        onMessage: (text) {
+        onFrame: (frame) {
           if (!mounted) return;
-          setState(() {
-            _waitingForResponse = false;
-            _messages.add(ChatMessage(text: text, isUser: false));
-          });
-          _scrollToBottom();
+          switch (frame) {
+            case ChatStatus(:final detail):
+              // Progress while the turn runs — a local model can take tens of
+              // seconds, and a blank screen reads as "hung".
+              setState(() => _statusDetail = detail);
+            case ChatAnswer(:final content):
+              setState(() {
+                _waitingForResponse = false;
+                _statusDetail = null;
+                _messages.add(ChatMessage(text: content, isUser: false));
+              });
+              _scrollToBottom();
+            case ChatError(:final message):
+              setState(() {
+                _waitingForResponse = false;
+                _statusDetail = null;
+                _messages.add(
+                  ChatMessage(text: message, isUser: false, isError: true),
+                );
+              });
+              _scrollToBottom();
+          }
         },
         onError: (_) {
           if (mounted) {
             setState(() {
               _connected = false;
               _waitingForResponse = false;
+              _statusDetail = null;
             });
           }
         },
@@ -91,6 +120,7 @@ class _ChatScreenState extends State<ChatScreen> {
             setState(() {
               _connected = false;
               _waitingForResponse = false;
+              _statusDetail = null;
             });
           }
         },
@@ -158,6 +188,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _pendingImagePath = null;
       _pendingImageName = null;
       _waitingForResponse = true;
+      _statusDetail = null;
     });
     AppServices.instance.chat.send(wsMessage);
     _scrollToBottom();
@@ -344,7 +375,7 @@ class _ChatScreenState extends State<ChatScreen> {
             itemCount: _messages.length + (_waitingForResponse ? 1 : 0),
             itemBuilder: (context, index) {
               if (_waitingForResponse && index == _messages.length) {
-                return const _TypingIndicator();
+                return _TypingIndicator(detail: _statusDetail);
               }
               return _MessageBubble(message: _messages[index]);
             },
@@ -512,7 +543,11 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class _TypingIndicator extends StatefulWidget {
-  const _TypingIndicator();
+  /// Progress text from the server, e.g. "Searching recipes…". Null before the
+  /// first status frame arrives.
+  final String? detail;
+
+  const _TypingIndicator({this.detail});
 
   @override
   State<_TypingIndicator> createState() => _TypingIndicatorState();
@@ -576,32 +611,53 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: List.generate(3, (i) {
-                return AnimatedBuilder(
-                  animation: _controller,
-                  builder: (_, __) {
-                    final phase = (_controller.value - i * 0.2).clamp(0.0, 1.0);
-                    final opacity =
-                        (0.3 +
-                                0.7 *
-                                    (phase < 0.5
-                                        ? phase / 0.5
-                                        : (1.0 - phase) / 0.5))
-                            .clamp(0.3, 1.0);
-                    return Container(
-                      margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: opacity),
-                        shape: BoxShape.circle,
+              children: [
+                if (widget.detail != null && widget.detail!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      widget.detail!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontStyle: FontStyle.italic,
                       ),
+                    ),
+                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (i) {
+                    return AnimatedBuilder(
+                      animation: _controller,
+                      builder: (_, __) {
+                        final phase = (_controller.value - i * 0.2).clamp(
+                          0.0,
+                          1.0,
+                        );
+                        final opacity =
+                            (0.3 +
+                                    0.7 *
+                                        (phase < 0.5
+                                            ? phase / 0.5
+                                            : (1.0 - phase) / 0.5))
+                                .clamp(0.3, 1.0);
+                        return Container(
+                          margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: opacity),
+                            shape: BoxShape.circle,
+                          ),
+                        );
+                      },
                     );
-                  },
-                );
-              }),
+                  }),
+                ),
+              ],
             ),
           ),
         ],

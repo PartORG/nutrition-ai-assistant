@@ -163,6 +163,7 @@ class ServiceFactory:
         self._recipe_rag = RecipeNutritionRAG(
             data_folder=str(cfg.data_dir),
             k=cfg.rag_recipe_k,
+            include_synthetic_meals=cfg.rag_include_synthetic_meals,
             model_name=cfg.active_llm_model,
             vectorstore_path=str(cfg.recipes_nutrition_vector_path),
             embedding_model=cfg.embedding_model,

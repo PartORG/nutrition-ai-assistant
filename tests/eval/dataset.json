@@ -1,96 +1,278 @@
 {
-  "_about": "Starter eval set. Relevance is a keyword proxy: a retrieved chunk counts as relevant if its text contains the 'expects' term(s). These labels are best-guesses for the recipe/nutrition CSVs and medical PDFs \u2014 REVIEW and refine them against your actual corpus so the numbers are meaningful. Use match_all:true to require every term.",
+  "_about": "Retrieval eval for the recipe corpus. Relevance is by DOCUMENT ID (a doc's recipe_name), not by keyword substring: the old proxy counted a chunk relevant if it contained a word like 'chicken', which structurally favoured BM25 and hit a ceiling because common words appear in a large fraction of 3,090 documents. Each query here is phrased to describe a dish WITHOUT using words from its title, so a retriever cannot win by lexical overlap alone.",
+  "_caveat": "Starter set built by the assistant, validated so every gold ID exists in the corpus. It is NOT a domain-reviewed gold standard: relevance judgments are one person's opinion of what a query should return, and other recipes in the corpus may be equally relevant but unlabelled, which depresses recall. Treat absolute numbers with suspicion; treat A/B differences between retrieval configs, read together with the bootstrap CI, as the signal.",
   "_fields": {
     "query": "the user query sent to the retriever",
-    "rag": "'recipe' (recipe corpus) or 'medical' (PDF constraints)",
-    "expects": "term(s) a relevant chunk should contain (case-insensitive)",
-    "match_all": "optional; require ALL terms instead of ANY (default false)"
+    "rag": "'recipe' or 'medical'",
+    "relevant_ids": "gold document IDs (recipe_name). Preferred signal.",
+    "expects": "legacy keyword proxy, used only when relevant_ids is absent",
+    "match_all": "legacy; require ALL keyword terms (default false)"
   },
   "cases": [
     {
-      "query": "high protein chicken dinner",
+      "query": "north african stew with dried fruit and chickpeas",
       "rag": "recipe",
-      "expects": [
-        "chicken"
+      "relevant_ids": [
+        "Moroccan Chicken Tagine",
+        "Instant Pot Chicken Tagine with Apricots and Chickpeas"
       ]
     },
     {
-      "query": "quick vegetarian pasta recipe",
+      "query": "cold spanish tomato soup served chilled",
       "rag": "recipe",
-      "expects": [
-        "pasta"
+      "relevant_ids": [
+        "Green Gazpacho",
+        "Bloody Mary-Flavored Gazpacho Recipe"
       ]
     },
     {
-      "query": "low sodium vegetable soup",
+      "query": "creamy italian rice cooked slowly in stock",
       "rag": "recipe",
-      "expects": [
-        "soup"
+      "relevant_ids": [
+        "Risotto Al Balsamico",
+        "Cindy Lynn's Tomato-Chicken Risotto",
+        "Jambalaya Risotto"
       ]
     },
     {
-      "query": "healthy breakfast with eggs",
+      "query": "raw fish cured in citrus juice",
       "rag": "recipe",
-      "expects": [
-        "egg"
+      "relevant_ids": [
+        "Avocado Shrimp Ceviche-Estillo Sarita",
+        "Mexican Mango and White Fish Ceviche"
       ]
     },
     {
-      "query": "grilled salmon with vegetables",
+      "query": "layered greek dessert with filo pastry honey and nuts",
       "rag": "recipe",
-      "expects": [
-        "salmon"
+      "relevant_ids": [
+        "Baklava",
+        "Nutty Baklava"
       ]
     },
     {
-      "query": "gluten free dessert",
+      "query": "hungarian paprika beef soup",
       "rag": "recipe",
-      "expects": [
-        "gluten"
+      "relevant_ids": [
+        "Dad's Hungarian Goulash Soup Recipe"
       ]
     },
     {
-      "query": "keto avocado meal",
+      "query": "chickpea dip blended with tahini",
       "rag": "recipe",
-      "expects": [
-        "avocado"
+      "relevant_ids": [
+        "Avocado Hummus",
+        "White Bean & Herb Hummus With Crudites"
       ]
     },
     {
-      "query": "rice and beans bowl",
+      "query": "savoury egg tart baked in pastry",
       "rag": "recipe",
-      "expects": [
-        "rice",
-        "bean"
+      "relevant_ids": [
+        "Spinach Bacon Quiche",
+        "Divine Crab Quiche"
       ]
     },
     {
-      "query": "how much protein is in beef",
+      "query": "thick creamy soup made with sweetcorn",
       "rag": "recipe",
-      "expects": [
-        "beef",
-        "protein"
+      "relevant_ids": [
+        "Parmesan Corn Chowder"
       ]
     },
     {
-      "query": "foods rich in fiber",
+      "query": "stewed summer vegetables from provence",
       "rag": "recipe",
-      "expects": [
-        "fiber"
+      "relevant_ids": [
+        "Southern Italian Ratatouille",
+        "Turkey Burgers With Quick Ratatouille"
       ]
     },
     {
-      "query": "calories in a banana",
+      "query": "mashed avocado dip with lime",
       "rag": "recipe",
-      "expects": [
-        "banana"
+      "relevant_ids": [
+        "Best Guacamole",
+        "Chunky Guacamole"
       ]
     },
     {
-      "query": "tomato based vegetarian curry",
+      "query": "beef in sour cream sauce over noodles",
       "rag": "recipe",
-      "expects": [
-        "tomato"
+      "relevant_ids": [
+        "Beef Stroganoff:  Easy And Natural",
+        "Chili Stroganoff"
+      ]
+    },
+    {
+      "query": "minced meat baked in a loaf tin",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Chicken Meatloaf",
+        "Chicken Meatloaf with Sun-Dried Tomatoes"
+      ]
+    },
+    {
+      "query": "middle eastern salad with bulgur wheat and parsley",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Tabbouleh(A Middle Eastern Salad)"
+      ]
+    },
+    {
+      "query": "beef fillet wrapped in pastry",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Classic Beef Wellingtons"
+      ]
+    },
+    {
+      "query": "minced lamb topped with mashed potato",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Shepherd Pie",
+        "West Virginia Shepherd’S Pie"
+      ]
+    },
+    {
+      "query": "shredded cabbage side salad with dressing",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Carry-Out Campers' Coleslaw",
+        "Coleslaw In A Bag"
+      ]
+    },
+    {
+      "query": "rich chocolate traybake squares",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Brown Sugar Brownies",
+        "Brownie Chocolate Chip Cookie Bars"
+      ]
+    },
+    {
+      "query": "baked dessert with a cream cheese filling",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Almond Cheesecake"
+      ]
+    },
+    {
+      "query": "tortillas rolled with filling and baked in sauce",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Cilantro-Lime Enchiladas",
+        "Black Bean & Chicken Enchilada Lasagna"
+      ]
+    },
+    {
+      "query": "soft breakfast batter cooked on a griddle",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Baked Apple Pancake"
+      ]
+    },
+    {
+      "query": "crisp batter cooked in a patterned iron",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Diane'S Waffles"
+      ]
+    },
+    {
+      "query": "quick bread made with overripe fruit",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Almost No Fat Banana Bread",
+        "Banana Bread - Quick Bread for Machines"
+      ]
+    },
+    {
+      "query": "small sweet british bake served with tea",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Amazing Lemon Scones",
+        "Fabulous Fig Scones"
+      ]
+    },
+    {
+      "query": "blended cold fruit drink",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Avocado Smoothie",
+        "Apricot, Cashew Smoothie"
+      ]
+    },
+    {
+      "query": "vegetables quickly cooked in a hot wok",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Chicken And Vegetable Stir Fry Recipe",
+        "Vegetable Orange Stir Fry"
+      ]
+    },
+    {
+      "query": "slow cooked joint of beef",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Bubba'S Pot Roast"
+      ]
+    },
+    {
+      "query": "grilled skewers with a sweet japanese glaze",
+      "rag": "recipe",
+      "relevant_ids": [
+        "BBQ Teriyaki Pork Kabobs"
+      ]
+    },
+    {
+      "query": "noodles with fermented korean cabbage",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Mentaiko Kimchi Udon"
+      ]
+    },
+    {
+      "query": "soft parcels of dough simmered on a stew",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Chicken And Dumplings",
+        "30 Minute Chicken And Dumplings"
+      ]
+    },
+    {
+      "query": "crumbly yellow bread baked from maize",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Cornbread"
+      ]
+    },
+    {
+      "query": "north african semolina grains as a side",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Couscous With Asparagus and Lime"
+      ]
+    },
+    {
+      "query": "oat bars for a portable snack",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Granola Bars"
+      ]
+    },
+    {
+      "query": "creamy white pasta sauce with parmesan",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Bt Og Alfredo Sauce"
+      ]
+    },
+    {
+      "query": "tomato sauce simmered for pasta",
+      "rag": "recipe",
+      "relevant_ids": [
+        "Pasta With Marinara Sauce And Ricotta"
       ]
     },
     {
@@ -99,7 +281,8 @@
       "expects": [
         "sugar",
         "diabet"
-      ]
+      ],
+      "_note": "keyword proxy: the medical PDFs are private and not in the repo, so gold IDs cannot be assigned here"
     },
     {
       "query": "foods to avoid with hypertension",
@@ -108,7 +291,8 @@
         "sodium",
         "salt",
         "blood pressure"
-      ]
+      ],
+      "_note": "keyword proxy: the medical PDFs are private and not in the repo, so gold IDs cannot be assigned here"
     },
     {
       "query": "kidney disease diet recommendations",
@@ -116,7 +300,8 @@
       "expects": [
         "kidney",
         "potassium"
-      ]
+      ],
+      "_note": "keyword proxy: the medical PDFs are private and not in the repo, so gold IDs cannot be assigned here"
     },
     {
       "query": "celiac disease gluten free guidance",
@@ -124,7 +309,8 @@
       "expects": [
         "gluten",
         "celiac"
-      ]
+      ],
+      "_note": "keyword proxy: the medical PDFs are private and not in the repo, so gold IDs cannot be assigned here"
     },
     {
       "query": "nutrition for parkinsons disease",
@@ -132,7 +318,8 @@
       "expects": [
         "parkinson",
         "protein"
-      ]
+      ],
+      "_note": "keyword proxy: the medical PDFs are private and not in the repo, so gold IDs cannot be assigned here"
     },
     {
       "query": "heart healthy low fat diet",
@@ -140,7 +327,8 @@
       "expects": [
         "fat",
         "cholesterol"
-      ]
+      ],
+      "_note": "keyword proxy: the medical PDFs are private and not in the repo, so gold IDs cannot be assigned here"
     }
   ]
 }

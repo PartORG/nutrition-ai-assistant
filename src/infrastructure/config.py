@@ -75,6 +75,16 @@ class Settings:
     # Raise it back via RAG_RECIPE_K if recall suffers.
     rag_recipe_k: int = 5
 
+    # data/cleaned_healthy_meals.csv is fabricated filler, not food data: names
+    # are 835 random words x 8 dish suffixes ("Suffer Stew"), macros are
+    # uniformly random, 65% of its "Keto" rows exceed 50g carbs and 100% of its
+    # "Vegan" rows carry dietary cholesterol. Its documents contain no name, no
+    # ingredients and no instructions — only macros — so the safety filter has
+    # nothing to check them against, yet they are 39% of the retrievable corpus.
+    # Excluded by default. Set RAG_INCLUDE_SYNTHETIC_MEALS=true to restore the
+    # old behaviour; changing it requires `nutriai-index rebuild`.
+    rag_include_synthetic_meals: bool = False
+
     # Connection details
     ollama_base_url: str = "http://localhost:11434/"
     groq_api_key: str = ""
@@ -149,6 +159,9 @@ class Settings:
             rag_fetch_k=int(os.getenv("RAG_FETCH_K", "30")),
             rag_rerank_top_n=int(os.getenv("RAG_RERANK_TOP_N", "8")),
             rag_recipe_k=int(os.getenv("RAG_RECIPE_K", "5")),
+            rag_include_synthetic_meals=os.getenv(
+                "RAG_INCLUDE_SYNTHETIC_MEALS", "false"
+            ).lower() in ("1", "true", "yes"),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/"),
             groq_api_key=groq_key,
             openai_api_key=openai_key,

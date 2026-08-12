@@ -155,6 +155,7 @@ class RecipeNutritionRAG(BaseRAG):
         reranker=None,
         embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         embeddings=None,
+        include_synthetic_meals: bool = False,
     ):
         # Only Ollama uses the native format="json" parameter.
         # Cloud providers (Groq, OpenAI) rely on the prompt for JSON output.
@@ -177,6 +178,7 @@ class RecipeNutritionRAG(BaseRAG):
         )
         self.data_folder = Path(data_folder)
         self.k = k
+        self.include_synthetic_meals = include_synthetic_meals
 
         self.vectorstore_recipes: FAISS | None = None
         self.smart_retriever: SmartRetriever | None = None
@@ -314,8 +316,16 @@ class RecipeNutritionRAG(BaseRAG):
         csv_sources = [
             ("cleaned_recipes.csv", load_recipes_csv, "recipes"),
             ("cleaned_recipes_data_sample.csv", load_recipes_data_sample_csv, "recipes"),
-            ("cleaned_healthy_meals.csv", load_healthy_meals_csv, "recipes"),
         ]
+        if self.include_synthetic_meals:
+            csv_sources.append(
+                ("cleaned_healthy_meals.csv", load_healthy_meals_csv, "recipes")
+            )
+        else:
+            logger.info(
+                "Skipping cleaned_healthy_meals.csv — fabricated filler with no "
+                "ingredients (set RAG_INCLUDE_SYNTHETIC_MEALS=true to include it)"
+            )
 
         threshold_bytes = self.LARGE_FILE_THRESHOLD_MB * 1024 * 1024
         all_loaded: dict[str, list[Document]] = {}
@@ -382,9 +392,14 @@ class RecipeNutritionRAG(BaseRAG):
         return int(self.vectorstore_recipes.index.d)
 
     def _source_files(self) -> list[Path]:
-        """The CSVs this index is built from, for staleness reporting."""
+        """The CSVs this index is actually built from, for staleness reporting."""
         folder = Path(self.data_folder)
-        return sorted(folder.glob("*.csv")) if folder.is_dir() else []
+        if not folder.is_dir():
+            return []
+        names = ["cleaned_recipes.csv", "cleaned_recipes_data_sample.csv"]
+        if self.include_synthetic_meals:
+            names.append("cleaned_healthy_meals.csv")
+        return [folder / n for n in names if (folder / n).is_file()]
 
     def _embeddings_match_index(self) -> bool:
         """Check BOTH stores — the base hook only looks at self.vectorstore."""

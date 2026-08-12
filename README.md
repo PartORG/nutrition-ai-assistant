@@ -398,6 +398,25 @@ and almonds. Can you suggest a creative recipe?
 - **Private medical data not included:** Medical research PDFs used by the Medical RAG are private and not committed to this repository.
 - **Vector stores:** Pre-built FAISS indexes live in `vector_databases/`. Manage them with `nutriai-index` — see [Vector index management](#vector-index-management) below.
 
+### The synthetic meals dataset
+
+`data/cleaned_healthy_meals.csv` is **excluded from the index by default**. It is
+fabricated filler, not food data:
+
+- names are 835 random words × 8 dish suffixes ("Suffer Stew", "Animal Curry")
+- calories and macros are uniformly random
+- **65%** of its "Keto" rows exceed 50 g carbs; **100%** of its "Vegan" rows
+  carry dietary cholesterol, which is physically impossible
+- its documents contain no name, no ingredients and no instructions — only
+  macros — so the safety filter has nothing to check them against
+
+It was 39% of the retrievable corpus, meaning roughly two in five candidate
+recipes were content-free rows with invented nutrition, in an app that
+recommends food to people managing medical conditions.
+
+Set `RAG_INCLUDE_SYNTHETIC_MEALS=true` to restore the old behaviour. Changing it
+requires `nutriai-index rebuild`.
+
 ### Repository weight
 
 `notebooks/` (27 MB of exploratory research), the 36 MB demo video and the 4 MB

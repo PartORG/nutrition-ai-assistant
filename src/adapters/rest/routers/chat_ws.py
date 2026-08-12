@@ -12,6 +12,7 @@ from adapters.rest.dependencies import (
     get_current_user,
     get_factory,
 )
+from adapters.rest.ws_protocol import answer_frame, error_frame, status_frame
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,11 +38,14 @@ async def websocket_chat(
         previous messages.
       - Otherwise a fresh conversation is started.
 
-    Protocol:
+    Protocol (see adapters.rest.ws_protocol):
       - Client sends: plain text message
-      - Server sends: plain text agent response
+      - Server sends: JSON frames — {"type": "status"|"answer"|"error", ...}
       - On auth failure: close with code 4001
-      - On unhandled error: send plain-text error then close 1011
+      - On unhandled error: send an `error` frame, then close 1011
+
+    Errors are their own frame type. Previously they were sent with send_text,
+    identical to an answer, so the client rendered failures as assistant speech.
     """
     factory = get_factory()
     auth_service = factory.create_authentication_service()
@@ -60,6 +64,11 @@ async def websocket_chat(
     await _cleanup_old_data(user_id, factory)
 
     ctx = await build_session_ctx(user_id, conversation_id, factory)
+
+    async def _emit_progress(stage: str, detail: str = "") -> None:
+        await ws.send_text(status_frame(stage, detail))
+
+    ctx.on_progress = _emit_progress
     agent = factory.create_agent(ctx)
 
     try:
@@ -67,16 +76,27 @@ async def websocket_chat(
             message = await ws.receive_text()
             logger.info("WS user=%d conv=%s | %s", user_id, conversation_id, message[:200])
             ctx.new_request()
-            response = await agent.run(ctx, message)
-            await ws.send_text(response)
+            try:
+                response = await agent.run(ctx, message)
+            except Exception:
+                # One failed turn must not kill the session — report it as an
+                # error frame and keep the socket open so the user can retry.
+                logger.exception("Agent turn failed for user %d", user_id)
+                await ws.send_text(error_frame(
+                    "I hit a problem answering that. Try rephrasing, or ask again.",
+                    recoverable=True,
+                ))
+                continue
+            await ws.send_text(answer_frame(response, conversation_id))
     except WebSocketDisconnect:
         pass
-    except Exception as exc:
+    except Exception:
         logger.exception("Unhandled error in WS handler for user %d", user_id)
         try:
-            await ws.send_text(
-                f"Sorry, an unexpected error occurred: {exc}\n\nPlease reconnect and try again."
-            )
+            await ws.send_text(error_frame(
+                "The connection hit an unexpected error. Please reconnect.",
+                recoverable=False,
+            ))
         except Exception:
             pass
         await ws.close(code=1011)
