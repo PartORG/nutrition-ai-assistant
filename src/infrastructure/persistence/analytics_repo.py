@@ -124,7 +124,7 @@ class SQLiteAnalyticsRepository:
                     COUNT(*)
                    FROM nutrition_history
                    WHERE user_id = ? AND (deleted_at = '' OR deleted_at IS NULL)
-                     AND DATE(created_at) = DATE('now')
+                     AND DATE(created_at) = DATE('now', 'localtime')
                 """,
                 (user_id,),
             )
@@ -151,7 +151,7 @@ class SQLiteAnalyticsRepository:
                    FROM nutrition_history
                    WHERE user_id = ?
                      AND (deleted_at = '' OR deleted_at IS NULL)
-                     AND created_at >= DATE('now', '-6 days')
+                     AND created_at >= DATE('now', '-6 days', 'localtime')
                    GROUP BY day
                    ORDER BY day ASC
                 """,

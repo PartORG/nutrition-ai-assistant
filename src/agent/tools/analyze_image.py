@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -85,6 +86,28 @@ class AnalyzeImageTool(BaseTool):
         image_path: str = "",
         **kwargs,
     ) -> ToolResult:
+        """Detect ingredients, then delete the upload.
+
+        /api/upload/image writes a file per photo and returns its path; the
+        REST analyze endpoint cleans up after itself but this one did not, so
+        every photo ever sent over the socket stayed on disk forever.
+        """
+        try:
+            return await self._execute(ctx, image_path, **kwargs)
+        finally:
+            consumed = ctx.scratch.pop("_analyzed_image_path", None)
+            if consumed:
+                try:
+                    Path(consumed).unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("Could not remove upload %s", consumed, exc_info=True)
+
+    async def _execute(
+        self,
+        ctx: SessionContext,
+        image_path: str = "",
+        **kwargs,
+    ) -> ToolResult:
         """Detect ingredients and get recipe recommendations.
 
         Reads the original user message from ctx.scratch so that any text the
@@ -119,14 +142,13 @@ class AnalyzeImageTool(BaseTool):
 
             detected = result.detected
             ingredients_str = ", ".join(detected.ingredients)
-            source_label = detected.source or "unknown"
-            if detected.source == "LLaVA":
-                source_note = "detected via LLaVA (visual AI)"
-            else:
-                source_note = f"detected via {source_label}"
+            source_note = f"detected via {detected.source or 'unknown'}"
+            if detected.confirmed:
+                source_note += f", {len(detected.confirmed)} cross-confirmed"
 
             confidence_parts = [
                 f"{ing}: {detected.confidence_scores.get(ing, 0):.0%}"
+                + ("✓" if ing in detected.confirmed else "")
                 for ing in detected.ingredients[:5]
             ]
             conf_str = ", ".join(confidence_parts) if confidence_parts else "n/a"

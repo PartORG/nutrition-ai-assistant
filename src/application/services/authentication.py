@@ -33,6 +33,21 @@ class AuthenticationService:
         jwt_expiry_hours: int = 24,
         jwt_algorithm: str = "HS256",
     ):
+        # Enforced here rather than in Settings.from_env() so that tools which
+        # need config but never mint a token — `nutriai-index`, the smoke
+        # scripts — still run without a signing key. Anything that can issue
+        # or verify a JWT goes through this constructor.
+        #
+        # 32 chars, not just "non-empty": a short secret is offline-crackable
+        # from any normally-issued token, and a forged {"role": "admin"} then
+        # walks through every authorization check in the app.
+        if len(jwt_secret) < 32 or jwt_secret == "change-me-in-production":
+            raise RuntimeError(
+                "JWT_SECRET must be set to at least 32 characters. Generate one with:\n"
+                "    python -c 'import secrets; print(secrets.token_urlsafe(32))'\n"
+                "then put it in .env as JWT_SECRET=<value>."
+            )
+
         self._user_repo = user_repo
         self._auth_repo = auth_repo
         self._jwt_secret = jwt_secret
@@ -66,7 +81,15 @@ class AuthenticationService:
             role="user",
             user_id=user_id,
         )
-        await self._auth_repo.save(auth)
+        try:
+            await self._auth_repo.save(auth)
+        except DuplicateLoginError:
+            # The get_by_login pre-check above and this insert are separate
+            # transactions, so two simultaneous registrations for the same
+            # login both pass the check and the loser trips UNIQUE. Don't
+            # leave the users row it already committed orphaned.
+            await self._user_repo.soft_delete(user_id)
+            raise
 
         logger.info("Registered user %d with login '%s'", user_id, request.login)
         return self._create_token(user_id, "user")
@@ -123,7 +146,12 @@ class AuthenticationService:
         if user is None:
             raise AuthenticationError("User no longer exists.")
 
-        role = payload.get("role", "user")
+        # Re-read the role from the DB rather than trusting the old payload,
+        # so demoting an admin actually takes effect — otherwise they refresh
+        # their pre-demotion token forever and keep passing the admin checks.
+        auth = await self._auth_repo.get_by_user_id(user_id)
+        role = auth.role if auth else "user"
+
         logger.info("Token refreshed for user %d", user_id)
         return self._create_token(user_id, role)
 

@@ -7,9 +7,11 @@ Implements UserRepository port. Extracted from db.py (lines 226-306).
 from __future__ import annotations
 
 import logging
+import sqlite3
 from datetime import datetime
 
 from domain.entities import User
+from domain.exceptions import DuplicateLoginError
 from infrastructure.persistence.connection import AsyncSQLiteConnection
 
 logger = logging.getLogger(__name__)
@@ -43,14 +45,25 @@ class SQLiteUserRepository:
 
     async def save(self, user: User) -> int:
         now = datetime.now().isoformat()
-        async with self._conn.acquire() as conn:
-            cursor = await conn.execute(
-                """INSERT INTO users (name, surname, user_name, caretaker, age, gender, created_at, updated_at, deleted_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (user.name, user.surname, user.user_name, user.caretaker,
-                 user.age, user.gender, now, now, ""),
-            )
-            return cursor.lastrowid
+        try:
+            async with self._conn.acquire() as conn:
+                cursor = await conn.execute(
+                    """INSERT INTO users (name, surname, user_name, caretaker, age, gender, created_at, updated_at, deleted_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (user.name, user.surname, user.user_name, user.caretaker,
+                     user.age, user.gender, now, now, ""),
+                )
+                return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            # users.user_name is UNIQUE and carries the login, so a concurrent
+            # registration trips this insert *before* the one in auth_repo.
+            # Guarding only the latter left this path raising a raw sqlite
+            # error the router turns into a 500 instead of a 409.
+            if "UNIQUE" not in str(exc):
+                raise
+            raise DuplicateLoginError(
+                f"Login '{user.user_name}' is already taken."
+            ) from exc
 
     async def update(self, user_id: int, field: str, value: object) -> None:
         allowed_fields = {"name", "surname", "user_name", "caretaker", "age", "gender"}

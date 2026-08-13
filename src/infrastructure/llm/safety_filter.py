@@ -41,6 +41,14 @@ logger = logging.getLogger(__name__)
 
 _VALID_SEVERITIES = {"critical", "high", "medium"}
 
+# Words carrying no food identity, dropped when splitting a multi-word avoid
+# item so that "raw shellfish products" keys on "shellfish", not "products".
+_FILLER_WORDS = {
+    "raw", "cooked", "fresh", "dried", "frozen", "canned", "products", "product",
+    "food", "foods", "items", "item", "based", "free", "with", "without", "and",
+    "any", "all", "the", "whole",
+}
+
 
 def _normalize_severity(value: str) -> str:
     """Map a model's severity onto the three the verdict logic understands.
@@ -152,7 +160,7 @@ class SafetyFilter:
         for recipe in recipes:
             issues: list[SafetyIssue] = []
             issues.extend(self._check_ingredients(recipe.ingredients, avoid_foods, restrictions))
-            issues.extend(self._check_nutrition(recipe.nutrition, constraint_rules, servings=recipe.servings))
+            issues.extend(self._check_nutrition(recipe.nutrition, constraint_rules))
             rule_issues_per_recipe.append(issues)
 
         # Step 3: LLM semantic check.
@@ -252,7 +260,28 @@ class SafetyFilter:
 
     @staticmethod
     def _word_match(word: str, text: str) -> bool:
-        return bool(re.search(r'\b' + re.escape(word) + r'\b', text, re.IGNORECASE))
+        """True if `word` occurs in `text` as a whole word.
+
+        A multi-word avoid item ("raw shellfish products") also matches on its
+        individual content words, so it still catches an ingredient listed as
+        just "shellfish". Filler words are dropped so "raw"/"products" alone
+        cannot flag everything. Over-flagging is the safe direction here: a
+        false positive costs one rejected recipe, a false negative feeds
+        someone an allergen.
+        """
+        if re.search(r'\b' + re.escape(word) + r'\b', text, re.IGNORECASE):
+            return True
+
+        parts = [w for w in re.split(r'\W+', word.lower()) if w not in _FILLER_WORDS and len(w) >= 4]
+        # Guard on "nothing left to match", NOT on "fewer than two words left".
+        # "raw shellfish products" reduces to the single token ["shellfish"],
+        # so a <2 check made this return False and the whole multi-word fix a
+        # no-op — the exact case it was written for.
+        if not parts:
+            return False
+        return any(
+            re.search(r'\b' + re.escape(p) + r'\b', text, re.IGNORECASE) for p in parts
+        )
 
     def _check_ingredients(
         self,
@@ -267,8 +296,9 @@ class SafetyFilter:
             ing_lower = ingredient.lower()
 
             for avoid in avoid_foods:
-                if len(avoid.split()) > 2:
-                    continue
+                # Previously `if len(avoid.split()) > 2: continue`, which
+                # silently gave "avoid raw shellfish products" zero rule-based
+                # checking and left only the LLM pass to catch it.
                 if self._word_match(avoid, ing_lower):
                     issues.append(SafetyIssue(
                         category="avoid_food",
@@ -299,14 +329,13 @@ class SafetyFilter:
     # | Task   | What is divided?            | Meaning                            |
     # | ------ | --------------------------- | ---------------------------------- |
     # | TASK 1 | Nutrition limit (`max_val`) | Convert daily → per meal           |
-    # | TASK 2 | Nutrition value (`value`)   | Convert total recipe → per serving |
+    # | TASK 2 | (removed — values already arrive per serving)             |
     # | TASK 3 | Interpretation change       | Treat constraints as daily         |
 
     def _check_nutrition(
         self,
         nutrition: NutritionValues,
         constraint_rules: dict[str, dict[str, float | None]],
-        servings: int | None = None,            # Future: adjust per-serving if servings provided
     ) -> list[SafetyIssue]:
 
         issues: list[SafetyIssue] = []
@@ -333,10 +362,12 @@ class SafetyFilter:
             if value is None:
                 continue
 
-            # TASK 2: Take servings into account
-            if servings and servings > 0:       # Avoid division by zero
-                value = value / servings        # Assuming input nutrition is total for the recipe, convert to per-serving for checks
-
+            # NOTE: deliberately NOT divided by servings. The values are
+            # already per-serving by contract — see _NutritionSchema in
+            # recipe_rag.py ("kcal per serving") and the retrieval prompts.
+            # Dividing again let a 1500 mg/serving sodium recipe pass a
+            # 2000 mg/day limit as 1500/4 = 375, while the UI showed the
+            # undivided 1500 under a "per serving" heading.
             max_val = rule.get("max")
             min_val = rule.get("min")
 

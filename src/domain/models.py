@@ -264,4 +264,8 @@ class DetectedIngredients:
     ingredients: list[str] = field(default_factory=list)
     confidence_scores: dict[str, float] = field(default_factory=dict)
     image_path: str = ""
-    source: str = ""  # Which detector produced this result: "LLaVA", etc.
+    source: str = ""  # Detector that produced this: "YOLO", "qwen2.5vl:7b+YOLO", …
+    # Ingredients that more than one detector independently agreed on. Empty
+    # for a single-detector run — absence means "not cross-checked", not
+    # "contradicted".
+    confirmed: list[str] = field(default_factory=list)

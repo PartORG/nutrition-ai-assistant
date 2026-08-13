@@ -2,7 +2,7 @@
 
 import asyncio
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from adapters.rest.dependencies import CurrentUser, build_session_ctx, get_current_user, get_factory
@@ -98,21 +98,23 @@ async def update_profile(
     factory: ServiceFactory = Depends(get_factory),
 ):
     """Update user profile information."""
-    print(f"🔵 Backend: Received update request for user {user.user_id}")
-    print(f"🔵 Backend: Data = {data}")
-    
     user_repo = factory.create_user_repository()
-    
+
+    # Checked BEFORE the writes: a 24h token outlives account deletion, and
+    # updating a deleted user's row and then 404-ing is the worst of both.
+    if await user_repo.get_by_id(user.user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
     # Update each field individually
     await user_repo.update(user.user_id, "name", data.name)
     await user_repo.update(user.user_id, "age", data.age)
     await user_repo.update(user.user_id, "gender", data.gender)
     await user_repo.update(user.user_id, "caretaker", data.caretaker)
-    
-    # Fetch updated user
+
     user_entity = await user_repo.get_by_id(user.user_id)
-    print("🔵 Backend: User updated successfully")
-    
+    if user_entity is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
     return {
         "message": "Profile updated successfully",
         "user": UserOut(

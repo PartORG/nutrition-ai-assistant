@@ -16,6 +16,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from adapters.rest.dependencies import set_factory
 from adapters.rest.routers import (
@@ -61,6 +62,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Reject oversized bodies before Starlette parses them. The 10 MB cap in the
+# upload handler runs only after request.form() has already spooled the whole
+# multipart body to the system temp dir, so it bounds what lands in uploads/
+# but not what a 50 GB POST does to the disk.
+#
+# Chunked requests send no Content-Length and slip past this — the
+# authoritative limit belongs at the reverse proxy (nginx:
+# `client_max_body_size 10m`).
+MAX_BODY_BYTES = 10 * 1024 * 1024 + 8192   # payload + multipart framing
+
+
+@app.middleware("http")
+async def _cap_request_body(request, call_next):
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        return JSONResponse({"detail": "Request too large."}, status_code=413)
+    return await call_next(request)
+
 
 # Register routers
 app.include_router(auth.router, prefix="/api")

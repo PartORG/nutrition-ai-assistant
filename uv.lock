@@ -1343,6 +1343,7 @@ dependencies = [
     { name = "ollama" },
     { name = "pandas" },
     { name = "passlib", extra = ["bcrypt"] },
+    { name = "pillow" },
     { name = "protobuf" },
     { name = "pydantic" },
     { name = "pypdf" },
@@ -1396,6 +1397,7 @@ requires-dist = [
     { name = "ollama", specifier = ">=0.3.0" },
     { name = "pandas", specifier = "==2.2.2" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
+    { name = "pillow", specifier = ">=10.0.0" },
     { name = "protobuf", specifier = "==4.25.3" },
     { name = "pydantic", specifier = ">=2.7.4,<3.0.0" },
     { name = "pypdf", specifier = "==5.1.0" },
@@ -1411,7 +1413,7 @@ requires-dist = [
     { name = "torchvision", specifier = "==0.21.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "transformers", specifier = ">=4.40.0" },
     { name = "typing-extensions", specifier = ">=4.14" },
-    { name = "ultralytics", specifier = ">=8.3.0" },
+    { name = "ultralytics", specifier = ">=8.4.0" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.27.0" },
 ]
 

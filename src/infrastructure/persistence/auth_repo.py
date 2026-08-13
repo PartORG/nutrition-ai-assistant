@@ -7,9 +7,11 @@ Implements AuthenticationRepository port.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from datetime import datetime
 
 from domain.entities import Authentication
+from domain.exceptions import DuplicateLoginError
 from infrastructure.persistence.connection import AsyncSQLiteConnection
 
 logger = logging.getLogger(__name__)
@@ -23,15 +25,29 @@ class SQLiteAuthenticationRepository:
 
     async def save(self, auth: Authentication) -> int:
         now = datetime.now().isoformat()
-        async with self._conn.acquire() as conn:
-            cursor = await conn.execute(
-                """INSERT INTO authentication
-                   (login, password, role, user_id, created_at, updated_at, deleted_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (auth.login, auth.password, auth.role or "user",
-                 auth.user_id, now, now, ""),
-            )
-            return cursor.lastrowid
+        try:
+            async with self._conn.acquire() as conn:
+                cursor = await conn.execute(
+                    """INSERT INTO authentication
+                       (login, password, role, user_id, created_at, updated_at, deleted_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (auth.login, auth.password, auth.role or "user",
+                     auth.user_id, now, now, ""),
+                )
+                return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            # `login` is UNIQUE. Two simultaneous registrations both pass the
+            # service's get_by_login pre-check (separate transactions) and the
+            # loser lands here. Translate at the boundary so the application
+            # layer never has to know about sqlite — but only for the
+            # constraint we mean: a NOT NULL or FK failure is not a duplicate
+            # login, and reporting it as one makes the caller soft-delete a
+            # user over an unrelated error.
+            if "UNIQUE" not in str(exc):
+                raise
+            raise DuplicateLoginError(
+                f"Login '{auth.login}' is already taken."
+            ) from exc
 
     async def get_by_login(self, login: str) -> Authentication | None:
         async with self._conn.acquire() as conn:

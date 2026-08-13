@@ -55,5 +55,10 @@ class SessionContext:
 
         scratch is intentionally NOT cleared — tools like save_recipe need
         to read last_recommendations that were stored in a previous turn.
+        The per-turn dedup keys are the exception: save_recipe writes one
+        `_saved_<request_id>` entry per turn that is never read again, so a
+        long-lived socket would grow one dict per turn forever.
         """
+        for key in [k for k in self.scratch if k.startswith("_saved_")]:
+            del self.scratch[key]
         self.request_id = uuid4().hex

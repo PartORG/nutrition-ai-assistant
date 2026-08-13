@@ -12,9 +12,11 @@ The service composes IngredientDetectorPort with RecommendationService.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from application.context import SessionContext
 from application.dto import ImageAnalysisResult
+from domain.exceptions import IngredientDetectionError
 from domain.models import DetectedIngredients
 from domain.ports import IngredientDetectorPort
 
@@ -28,11 +30,14 @@ class ImageAnalysisService:
         self,
         detector: IngredientDetectorPort,
         recommendation_service: object | None = None,
+        upload_dir: str = "./uploads",
     ):
         self._detector = detector
         # Avoid circular import: recommendation_service is typed loosely here,
         # but at runtime it's a RecommendationService instance.
         self._recommendation_service = recommendation_service
+        # Every image path reaching a detector is confined to this directory.
+        self._upload_root = Path(upload_dir).resolve()
 
     async def detect_ingredients(
         self,
@@ -52,7 +57,24 @@ class ImageAnalysisService:
             "Detecting ingredients from image for user %d: %s",
             ctx.user_id, image_path,
         )
+        # The path arrives from the user (the [IMAGE:...] tag in a chat message
+        # goes straight to the detector without passing an LLM), so an
+        # unguarded path here reads any file the process can read. Confine it
+        # to the upload directory before anything opens it.
+        if not Path(image_path).resolve().is_relative_to(self._upload_root):
+            logger.warning(
+                "Rejected out-of-tree image path for user %d: %s", ctx.user_id, image_path,
+            )
+            raise IngredientDetectionError("Image path is not an uploaded file.")
+
         detected = await self._detector.detect(image_path)
+
+        # Only now is the path known to be inside the upload root AND to have
+        # been consumed successfully. Recording it before either of those was
+        # true turned a blocked read into an arbitrary delete, and destroyed
+        # the user's photo whenever detection failed transiently.
+        ctx.scratch["_analyzed_image_path"] = image_path
+
         logger.info(
             "Detected %d ingredients: %s",
             len(detected.ingredients),

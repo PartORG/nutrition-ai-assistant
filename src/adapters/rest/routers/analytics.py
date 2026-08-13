@@ -15,14 +15,25 @@ async def get_analytics(
     factory: ServiceFactory = Depends(get_factory),
 ):
     """
-    Return aggregated platform statistics.
+    Return aggregated platform statistics. Admin only.
 
-    Available to any authenticated user. Shows:
+    Not available to ordinary users: recent_conversations carries other
+    users' conversation titles, and a title is the first 60 characters of
+    that user's opening message — frequently a health disclosure.
+
+    Nothing in the app grants the admin role — registration hardcodes "user".
+    Promote deliberately, against the DB:
+        UPDATE authentication SET role='admin' WHERE login='<you>';
+    The new role takes effect on the next login or token refresh.
+
     - Overview counts (users, conversations, messages, saved recipes)
     - Top 5 most saved recipes
     - Top 5 most common health conditions
     - 10 most recently active conversations
     """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only.")
+
     repo = factory.create_analytics_repository()
     overview, top_recipes, conditions, recent = await _gather(repo)
     return {

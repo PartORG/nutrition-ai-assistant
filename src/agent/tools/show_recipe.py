@@ -68,15 +68,15 @@ class ShowRecipeTool(BaseTool):
         rec_result: RecommendationResult | None = ctx.scratch.get(
             "last_recommendations"
         )
-        if rec_result is None:
-            return ToolResult(
-                output=(
-                    "No recipes available to show. "
-                    "Please search for recipes first."
-                )
-            )
+        if rec_result is not None:
+            recipes = rec_result.safe_recipes
+        else:
+            # Fallback: the list restored from DB on WebSocket reconnect.
+            # save_recipe already reads this, so without it "save recipe 2"
+            # worked after a reconnect while "show me recipe 2" claimed there
+            # were no recipes.
+            recipes = ctx.scratch.get("_cached_safe_recipes", [])
 
-        recipes = rec_result.safe_recipes
         if not recipes:
             return ToolResult(output="No recipes were found in the last search.")
 
