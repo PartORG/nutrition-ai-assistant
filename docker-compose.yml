@@ -1,10 +1,11 @@
 services:
 
   # ── 1. Ollama ─────────────────────────────────────────────────────────────
-  # Runs LLaVA (image fallback), llama3.2 (RAG LLM), and embeddings.
-  # Pull models on first start:
-  #   docker exec -it nutriai-ollama ollama pull llava
-  #   docker exec -it nutriai-ollama ollama pull llama3.2
+  # Runs the vision model (ingredient detection), llama3.2 (RAG LLM), and embeddings.
+  # Pull models on first start — the HTTP API does not auto-pull, so the tag
+  # here must match LLM_MODEL_OLLAMA / DETECTOR_VLM_MODEL exactly:
+  #   docker exec -it nutriai-ollama ollama pull qwen2.5vl:7b
+  #   docker exec -it nutriai-ollama ollama pull llama3.2:3b
   ollama:
     image: ollama/ollama:latest
     container_name: nutriai-ollama
@@ -23,7 +24,7 @@ services:
     # restart: unless-stopped
 
   # ── 2. Main API ───────────────────────────────────────────────────────────
-  # FastAPI application — src/ package. Calls ollama for LLM + LLaVA vision.
+  # FastAPI application — src/ package. Calls ollama for LLM + vision.
   api:
     build:
       context: .

@@ -109,8 +109,18 @@ class YOLOIngredientDetector:
         return self._model
 
     def _is_stock_coco(self, names: dict[int, str]) -> bool:
-        """True if the model still carries stock COCO labels rather than food classes."""
-        return "person" in names.values() and "traffic light" in names.values()
+        """True if the model still carries stock COCO labels rather than food classes.
+
+        The class count matters as much as the labels: YOLOE's open vocabulary
+        also contains "person" and "traffic light", and without the length
+        check its 4585 classes would be filtered down to COCO's 10 foods —
+        throwing away the exact capability it was chosen for.
+        """
+        return (
+            len(names) == 80
+            and "person" in names.values()
+            and "traffic light" in names.values()
+        )
 
     def _run_yolo(self, image_path: str) -> DetectedIngredients:
         model = self._load_model()

@@ -13,8 +13,17 @@ import pytest
 from domain.exceptions import IngredientDetectionError
 from infrastructure.cnn.yolo_detector import YOLOIngredientDetector
 
+# A real stock COCO checkpoint carries exactly 80 classes, and the detector
+# now keys on that count as well as the labels — an open-vocabulary model
+# (YOLOE, 4585 classes) also contains "person" and "traffic light" but must
+# NOT have its vocabulary filtered down to COCO's 10 foods.
 COCO_NAMES = {0: "person", 1: "traffic light", 2: "apple", 3: "broccoli"}
+COCO_NAMES.update({i: f"coco_class_{i}" for i in range(4, 80)})
+assert len(COCO_NAMES) == 80
+
 FOOD_NAMES = {0: "chicken", 1: "garlic", 2: "tomato"}
+OPEN_VOCAB_NAMES = {0: "person", 1: "traffic light", 2: "rice", 3: "chicken breast"}
+OPEN_VOCAB_NAMES.update({i: f"open_class_{i}" for i in range(4, 4585)})
 
 
 class _Box:
@@ -52,7 +61,7 @@ async def test_missing_image_raises(tmp_path):
 
 
 async def test_returns_real_confidence_not_a_constant(tmp_path):
-    """The LLaVA detector fabricates 0.95; YOLO must report the model's score."""
+    """The VLM has no calibrated score; YOLO must report the model's real one."""
     img = tmp_path / "food.jpg"
     img.write_bytes(b"fake")
 
@@ -96,6 +105,21 @@ async def test_stock_coco_drops_non_food(tmp_path):
 
     assert result.ingredients == ["apple"]
     assert "person" not in result.confidence_scores
+
+
+async def test_open_vocab_model_is_not_treated_as_stock_coco(tmp_path):
+    """YOLOE shares COCO's labels but has 4585 classes — do not filter it.
+
+    Without the class-count check this returned nothing at all: "rice" and
+    "chicken breast" are not in the 10-item COCO food alias map.
+    """
+    img = tmp_path / "food.jpg"
+    img.write_bytes(b"fake")
+
+    d = _detector(OPEN_VOCAB_NAMES, [_Box(2, 0.71), _Box(3, 0.66)])
+    result = await d.detect(str(img))
+
+    assert set(result.ingredients) == {"rice", "chicken breast"}
 
 
 async def test_finetuned_model_labels_pass_through_unfiltered(tmp_path):

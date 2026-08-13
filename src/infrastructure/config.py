@@ -42,7 +42,13 @@ class Settings:
     llm_provider: str = "ollama"
 
     # Model names — only the one matching llm_provider is used.
-    llm_model_ollama: str = "llama3.2"
+    #
+    # The Ollama tag must be one that is actually pulled: the HTTP API does
+    # NOT auto-pull the way `ollama run` does, so a bare "llama3.2" against a
+    # host that only has "llama3.2:3b" 404s on every request. Pin the tag.
+    # For better tool-calling with the 9-tool agent, `ollama pull qwen3:4b`
+    # and set LLM_MODEL_OLLAMA=qwen3:4b.
+    llm_model_ollama: str = "llama3.2:3b"
     llm_model_openai: str = "gpt-4.1-mini"
     llm_model_groq: str = "llama-3.3-70b-versatile"
 
@@ -97,13 +103,24 @@ class Settings:
     db_path: str = "users.db"
 
     # CNN / Ingredient Detector.
-    #   detector_backend = "llava" (zero-shot via Ollama) or "yolo" (local weights)
-    # yolo_weights accepts a stock checkpoint name (auto-downloaded) or a path
-    # to a fine-tuned best.pt — see training/README.md.
-    detector_backend: str = "llava"
+    #   detector_backend = "hybrid" (default: VLM proposes, YOLO cross-checks
+    #                      and scores, either one failing falls back to the
+    #                      other), "vlm"/"llava" (VLM only), "yolo" (YOLO only)
+    #
+    # yolo_weights defaults to YOLOE prompt-free: 4585 open-vocabulary classes
+    # including ~200 foods ("chicken breast", "boiled egg", "rice"), versus
+    # the 10 foods a stock COCO checkpoint knows. Auto-downloaded on first
+    # run. A fine-tuned best.pt also works — see training/README.md.
+    detector_backend: str = "hybrid"
+    vlm_model: str = "qwen2.5vl:7b"
+    # Layers to force onto the GPU for the VLM. 0 = let Ollama decide. Set to
+    # 99 (all) when Ollama refuses to load a vision model with "requires more
+    # system memory" despite the GPU having room — its estimator is
+    # conservative for multimodal models.
+    vlm_num_gpu: int = 0
     cnn_model_path: str = ""
     cnn_class_labels_path: str = ""
-    yolo_weights: str = "yolo11n.pt"
+    yolo_weights: str = "yoloe-11s-seg-pf.pt"
     yolo_confidence: float = 0.25
     yolo_device: str = "cpu"
 
@@ -112,8 +129,10 @@ class Settings:
     # Locally: defaults to ./uploads/ relative to the project root.
     upload_dir: str = "./uploads"
 
-    # JWT
-    jwt_secret: str = "change-me-in-production"
+    # JWT. There is deliberately no usable default: from_env() refuses to boot
+    # without a real secret, because anyone who has read this repo can forge
+    # {"user_id": 1, "role": "admin"} against a known one.
+    jwt_secret: str = ""
     jwt_expiry_hours: int = 24
 
     @property
@@ -132,11 +151,13 @@ class Settings:
         load_dotenv()
 
         root = project_root or Path(__file__).resolve().parent.parent.parent
-        
+
         # Get API keys from environment
         openai_key = os.getenv("OPENAI_API_KEY", "")
         groq_key = os.getenv("GROQ_API_KEY", "")
-        
+
+        jwt_secret = os.getenv("JWT_SECRET", "").strip()
+
         return cls(
             project_root=root,
             data_dir=root / "data",
@@ -147,7 +168,7 @@ class Settings:
 
             # Centralized LLM provider
             llm_provider=os.getenv("LLM_PROVIDER", "ollama"),
-            llm_model_ollama=os.getenv("LLM_MODEL_OLLAMA", "llama3.2"),
+            llm_model_ollama=os.getenv("LLM_MODEL_OLLAMA", "llama3.2:3b"),
             llm_model_openai=os.getenv("LLM_MODEL_OPENAI", "gpt-4.1-mini"),
             llm_model_groq=os.getenv("LLM_MODEL_GROQ", "llama-3.3-70b-versatile"),
             embedding_model=os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
@@ -168,13 +189,15 @@ class Settings:
 
             agent_max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "5")),
             db_path=os.getenv("DB_PATH", "users.db"),
-            detector_backend=os.getenv("DETECTOR_BACKEND", "llava").strip().lower(),
+            detector_backend=os.getenv("DETECTOR_BACKEND", "hybrid").strip().lower(),
+            vlm_model=os.getenv("DETECTOR_VLM_MODEL", "qwen2.5vl:7b"),
+            vlm_num_gpu=int(os.getenv("DETECTOR_VLM_NUM_GPU", "0")),
             cnn_model_path=os.getenv("CNN_MODEL_PATH", ""),
             cnn_class_labels_path=os.getenv("CNN_CLASS_LABELS_PATH", ""),
-            yolo_weights=os.getenv("YOLO_WEIGHTS", "yolo11n.pt"),
+            yolo_weights=os.getenv("YOLO_WEIGHTS", "yoloe-11s-seg-pf.pt"),
             yolo_confidence=float(os.getenv("YOLO_CONFIDENCE", "0.25")),
             yolo_device=os.getenv("YOLO_DEVICE", "cpu"),
             upload_dir=os.getenv("UPLOAD_DIR", "./uploads"),
-            jwt_secret=os.getenv("JWT_SECRET", "change-me-in-production"),
+            jwt_secret=jwt_secret,
             jwt_expiry_hours=int(os.getenv("JWT_EXPIRY_HOURS", "24")),
         )

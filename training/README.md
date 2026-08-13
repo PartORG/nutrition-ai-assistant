@@ -7,17 +7,24 @@ Nothing in this directory is imported by the app or shipped in the API image.
 
 ## Why this exists
 
-The app ships two detectors behind the same port:
+The app ships three detector backends behind the same port:
 
 | Backend | Training | Vocabulary | Confidence | Speed |
 |---|---|---|---|---|
-| `llava` (default) | none | open — names anything it sees | fabricated (always 0.95) | Ollama round-trip |
-| `yolo` | required | fixed to your label set | real per-box scores | ~50 ms on CPU |
+| `hybrid` (default) | none | open | real, from YOLO agreement | both, in parallel |
+| `vlm` | none | open — names anything it sees | none (flat 0.5) | Ollama round-trip |
+| `yolo` | none for YOLOE | 4585 classes, ~200 foods | real per-box scores | ~99 ms on CPU |
 
-Out of the box `yolo` loads a COCO checkpoint that knows **10 foods** (banana,
-apple, orange, broccoli, carrot, sandwich, pizza, hot dog, donut, cake). That is
-enough to prove the plumbing works and useless for real recipes. Everything
-below is about replacing it.
+`yolo` defaults to **YOLOE prompt-free** (`yoloe-11s-seg-pf.pt`), which is
+open-vocabulary and needs no training — it knows "chicken breast", "boiled
+egg" and "cherry tomato". Setting `YOLO_WEIGHTS=yolo11n.pt` drops you back to
+a COCO checkpoint that knows only **10 foods** (banana, apple, orange,
+broccoli, carrot, sandwich, pizza, hot dog, donut, cake).
+
+So fine-tuning is no longer required to get useful ingredients. Everything
+below is still the right path if you want a *closed*, high-precision label set
+for a known menu — YOLOE trades precision for coverage and needs the food-word
+filter in `hybrid_detector.py` to suppress scene nouns.
 
 ## You need a dataset first
 

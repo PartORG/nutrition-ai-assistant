@@ -53,7 +53,7 @@ A full walkthrough video and the slide deck live in `demo_material/` locally; th
 ## Key Features
 
 - **Live chat for recipe recommendations** -- Conversational agent considers health conditions, preferences, allergies, and dietary restrictions when suggesting recipes.
-- **Ingredient extraction from images** -- Upload a photo and LLaVA (a vision-language model via Ollama) identifies the ingredients.
+- **Ingredient extraction from images** -- Upload a photo and two models read it independently: a vision-language model (Ollama) names the ingredients and an open-vocabulary YOLO grades them, so each ingredient carries a real confidence instead of a guess.
 - **Dashboard** -- Track saved recipes, daily nutritional intake, and dietary goals.
 - **Medical RAG** -- Automatic extraction of nutritional advice based on health conditions from medical literature (FAISS + BM25 hybrid retrieval).
 - **Recipe RAG** -- Retrieval-augmented recipe search across nutrition and recipe datasets.
@@ -69,7 +69,7 @@ A full walkthrough video and the slide deck live in `demo_material/` locally; th
 | LLM / Agent | LangGraph (ReAct agent), LangChain 0.3, Ollama (llama3.2), Groq, OpenAI (switchable) |
 | Embeddings | HuggingFace (BAAI/bge-m3) |
 | Retrieval | Hybrid FAISS (faiss-cpu) + BM25 (rank_bm25) via RRF, cross-encoder reranking |
-| Image Detection | LLaVA vision-language model (via Ollama) |
+| Image Detection | Hybrid: Qwen2.5-VL (via Ollama) cross-checked by YOLOE (ultralytics) |
 | Database | SQLite (aiosqlite) |
 | Auth | JWT (python-jose), bcrypt, passlib |
 | Frontend | Flutter 3.x (Web, Android, Windows) |
@@ -98,14 +98,34 @@ A full walkthrough video and the slide deck live in `demo_material/` locally; th
  ┌─────────▼───────────┐
  │  Ollama  :11434     │
  │  • llama3.2 (LLM)   │
- │  • llava (vision)   │
+ │  • qwen2.5vl (vis.) │
  │  • embeddings       │
  └─────────────────────┘
 ```
 
 **Agent tools:** `search_recipes` . `save_recipe` . `show_recipe` . `analyze_image` . `nutrition_status` . `general_chat` . `safety_guard` . `crisis_support`
 
-**Image detection:** LLaVA via Ollama -- a vision-language model that extracts ingredients from food photos.
+**Image detection:** a hybrid of two detectors that disagree usefully.
+
+| | vocabulary | confidence | fails when |
+|---|---|---|---|
+| Qwen2.5-VL (Ollama) | open | none -- it never says how sure it is | Ollama is down |
+| YOLOE (local, CPU) | 4585 classes, ~200 foods | real per-box score | the food is not in vocabulary |
+
+The VLM proposes the ingredient list; YOLO independently confirms and scores
+it. An ingredient both models see is reported with YOLO's real score raised
+for the agreement; one only the VLM saw is marked unverified. A YOLO-only
+detection is kept only if every word of it appears in the 8.8k-food nutrition
+CSV, which is what separates "lime" from "still life". If either backend
+fails the other answers alone -- only a double failure errors.
+
+Measured on a stir-fry photo (chicken, rice, broccoli, carrot, cauliflower,
+baby corn): YOLO alone returned `plate, cup, chair, rice, spoon, broccoli,
+western food`; the VLM alone returned 14 items including pineapple and green
+beans that are not in the picture; the hybrid returned `rice 0.69 (confirmed),
+broccoli 0.68 (confirmed), chicken breast, carrots, corn, sauce`.
+
+Set `DETECTOR_BACKEND=vlm` or `yolo` to run just one.
 
 ---
 
@@ -195,9 +215,12 @@ At minimum, edit these:
 | `GROQ_API_KEY` | -- | Required when `LLM_PROVIDER=groq` |
 | `OPENAI_API_KEY` | -- | Required when `LLM_PROVIDER=openai` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/` | Ollama server URL |
-| `EMBEDDING_MODEL` | `sentence-transformers/all-mpnet-base-v2` | HuggingFace embedding model |
+| `EMBEDDING_MODEL` | `BAAI/bge-m3` | HuggingFace embedding model (changing it forces a reindex) |
 | `DB_PATH` | `users.db` | SQLite database path |
-| `CNN_MODEL_PATH` | `llava` | LLaVA model name used for image ingredient detection |
+| `DETECTOR_BACKEND` | `hybrid` | `hybrid`, `vlm`, or `yolo` |
+| `DETECTOR_VLM_MODEL` | `qwen2.5vl:7b` | Ollama vision model. Use `:3b` on a memory-tight host |
+| `DETECTOR_VLM_NUM_GPU` | `0` | Force N layers onto the GPU. Set `99` if Ollama rejects the VLM for "system memory" despite free VRAM |
+| `YOLO_WEIGHTS` | `yoloe-11s-seg-pf.pt` | Open-vocab YOLOE. `yolo11n.pt` for COCO, or a fine-tuned `best.pt` |
 
 </details>
 
@@ -220,8 +243,8 @@ source .venv/bin/activate      # macOS / Linux
 
 ```bash
 ollama serve
-ollama pull llama3.2
-ollama pull llava
+ollama pull llama3.2:3b     # must be a real tag -- the HTTP API does not auto-pull
+ollama pull qwen2.5vl:7b    # or qwen2.5vl:3b on a memory-tight machine
 ```
 
 ---
@@ -287,7 +310,7 @@ This starts:
 
 ```bash
 docker exec -it nutriai-ollama ollama pull llama3.2
-docker exec -it nutriai-ollama ollama pull llava
+docker exec -it nutriai-ollama ollama pull qwen2.5vl:7b
 ```
 
 ### 4. Verify
@@ -379,7 +402,7 @@ A `dart_defines/local.json.example` template is provided for reference.
 ### Image-based Ingredient Extraction
 
 1. Upload a food photo through the Flutter app.
-2. The image is sent to LLaVA via Ollama, which extracts the ingredients from the photo.
+2. The image goes to the vision-language model and to YOLO at the same time; ingredients both agree on are marked confirmed and scored, the rest are flagged unverified.
 3. Detected ingredients are returned to the agent, which can then suggest recipes using those ingredients.
 
 ### Example Queries

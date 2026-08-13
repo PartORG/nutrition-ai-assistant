@@ -47,7 +47,8 @@ from application.services.image_analysis import ImageAnalysisService
 from application.services.profile import ProfileService
 from application.services.recipe_manager import RecipeManagerService
 from application.services.recommendation import RecommendationService
-from infrastructure.cnn.ingredient_detector import LLaVAIngredientDetector
+from infrastructure.cnn.hybrid_detector import HybridIngredientDetector, load_food_vocabulary
+from infrastructure.cnn.ingredient_detector import VLMIngredientDetector
 from infrastructure.config import Settings
 from infrastructure.llm.intent_parser import IntentParser
 from infrastructure.llm.safety_filter import SafetyFilter
@@ -223,6 +224,7 @@ class ServiceFactory:
         return ImageAnalysisService(
             detector=self._image_detector,
             recommendation_service=rec_service,
+            upload_dir=self._config.upload_dir,
         )
 
     def create_authentication_service(self) -> AuthenticationService:
@@ -351,35 +353,58 @@ class ServiceFactory:
     def _build_image_detector(self):
         """Build the configured ingredient detector (called once during init).
 
-        Both backends satisfy IngredientDetectorPort, so nothing downstream
+        All backends satisfy IngredientDetectorPort, so nothing downstream
         cares which one is running.
         """
-        if self._config.detector_backend == "yolo":
-            from infrastructure.cnn.yolo_detector import YOLOIngredientDetector
+        cfg = self._config
+        backend = cfg.detector_backend
 
-            detector = YOLOIngredientDetector(
-                weights=self._config.yolo_weights,
-                confidence_threshold=self._config.yolo_confidence,
-                device=self._config.yolo_device,
+        if backend == "yolo":
+            detector = self._build_yolo_detector()
+        elif backend in ("vlm", "llava"):
+            detector = self._build_vlm_detector()
+        else:
+            if backend != "hybrid":
+                logger.warning(
+                    "Unknown DETECTOR_BACKEND '%s' — falling back to hybrid", backend,
+                )
+            vocabulary = load_food_vocabulary(cfg.data_dir / "cleaned_nutrition.csv")
+            detector = HybridIngredientDetector(
+                vlm=self._build_vlm_detector(),
+                yolo=self._build_yolo_detector(),
+                food_vocabulary=vocabulary,
             )
             logger.info(
-                "Image detector: YOLO ('%s', conf>=%.2f, device=%s)",
-                self._config.yolo_weights,
-                self._config.yolo_confidence,
-                self._config.yolo_device,
+                "Image detector: hybrid (VLM proposes, YOLO cross-checks; %d food words)",
+                len(vocabulary),
             )
-            return detector
 
-        llava_model = self._config.cnn_model_path or "llava"
-        detector = LLaVAIngredientDetector(
-            ollama_base_url=self._config.ollama_base_url,
-            model=llava_model,
-        )
-        logger.info(
-            "Image detector: LLaVA ('%s') at %s",
-            llava_model, self._config.ollama_base_url,
-        )
         return detector
+
+    def _build_yolo_detector(self):
+        cfg = self._config
+        from infrastructure.cnn.yolo_detector import YOLOIngredientDetector
+
+        logger.info(
+            "  YOLO detector: '%s' (conf>=%.2f, device=%s)",
+            cfg.yolo_weights, cfg.yolo_confidence, cfg.yolo_device,
+        )
+        return YOLOIngredientDetector(
+            weights=cfg.yolo_weights,
+            confidence_threshold=cfg.yolo_confidence,
+            device=cfg.yolo_device,
+        )
+
+    def _build_vlm_detector(self):
+        cfg = self._config
+        # cnn_model_path is the legacy name for the same setting.
+        model = cfg.cnn_model_path or cfg.vlm_model
+        logger.info("  VLM detector: '%s' at %s", model, cfg.ollama_base_url)
+        return VLMIngredientDetector(
+            ollama_base_url=cfg.ollama_base_url,
+            model=model,
+            num_gpu=cfg.vlm_num_gpu,
+        )
 
     def _ensure_initialized(self) -> None:
         if not self._initialized:
