@@ -294,6 +294,7 @@ class BaseRAG(ABC):
             embedding_model=self.embedding_model_name,
             chunk_size=getattr(self, "chunk_size", None),
             chunk_overlap=getattr(self, "chunk_overlap", None),
+            source_files=self._source_files(),
         )
         if reason:
             raise RAGError(

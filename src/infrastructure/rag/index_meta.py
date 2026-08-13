@@ -116,12 +116,27 @@ def describe_mismatch(
     embedding_model: str,
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,
+    source_files: list[Path] | None = None,
 ) -> str | None:
     """Return a human-readable reason the index is stale, or None if it matches.
 
     Only compares what actually invalidates an index. doc_count and built_at are
     recorded for diagnostics, not correctness.
     """
+    # An index built from a *different set of files* than the config now asks
+    # for is stale even when the model and chunking match. This is not
+    # hypothetical: the recipe index shipped holding 2,000 cleaned_healthy_meals
+    # documents — 39% of it fabricated filler — because the index predated
+    # RAG_INCLUDE_SYNTHETIC_MEALS=false and nothing compared the file sets.
+    # stale_sources() could not see it: it only checks files present in both.
+    if source_files is not None and existing.source_digests is not None:
+        want = {p.name for p in source_files}
+        had = set(existing.source_digests)
+        if extra := sorted(had - want):
+            return f"built from {', '.join(extra)}, which the current config excludes"
+        if missing := sorted(want - had):
+            return f"built without {', '.join(missing)}, which the current config includes"
+
     if existing.embedding_model != embedding_model:
         return (
             f"built with embedding model '{existing.embedding_model}', "

@@ -65,6 +65,11 @@ demo_material/*.pdf
 runs/
 datasets/
 
+# Raw, unprocessed source corpora. Only the cleaned_*.csv files the RAG
+# actually ingests belong in git — data/raw_* reached 8.3 GB locally, which
+# a single `git add -A` would otherwise try to commit.
+data/raw_*/
+
 # ── Project data ──
 *.db
 *.db-journal

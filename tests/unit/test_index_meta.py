@@ -147,3 +147,51 @@ def test_digest_skips_missing_files(tmp_path):
     real.write_text("x")
     digests = digest_sources([real, tmp_path / "gone.csv"])
     assert list(digests) == ["a.csv"]
+
+
+# ── corpus-composition drift ───────────────────────────────────────────────
+
+def test_index_built_from_an_excluded_file_is_reported_stale(tmp_path):
+    """The bug this caught in production: the shipped recipe index held 2,000
+    cleaned_healthy_meals documents (39% of it, fabricated filler) because it
+    predated RAG_INCLUDE_SYNTHETIC_MEALS=false. Model and chunking matched, so
+    nothing complained and every query competed against the filler."""
+    for n in ("cleaned_recipes.csv", "cleaned_healthy_meals.csv"):
+        (tmp_path / n).write_text("a,b\n1,2\n")
+
+    built_with = IndexMeta.build(
+        embedding_model="BAAI/bge-m3", embedding_dim=1024, doc_count=5090,
+        rag_class="RecipeNutritionRAG",
+        source_files=[tmp_path / "cleaned_recipes.csv", tmp_path / "cleaned_healthy_meals.csv"],
+    )
+    reason = describe_mismatch(
+        built_with,
+        embedding_model="BAAI/bge-m3",
+        source_files=[tmp_path / "cleaned_recipes.csv"],   # config now excludes the filler
+    )
+    assert reason is not None
+    assert "cleaned_healthy_meals.csv" in reason
+
+
+def test_index_missing_a_now_included_file_is_reported_stale(tmp_path):
+    for n in ("cleaned_recipes.csv", "cleaned_healthy_meals.csv"):
+        (tmp_path / n).write_text("a,b\n1,2\n")
+    built_with = IndexMeta.build(
+        embedding_model="BAAI/bge-m3", embedding_dim=1024, doc_count=3090,
+        rag_class="RecipeNutritionRAG", source_files=[tmp_path / "cleaned_recipes.csv"],
+    )
+    reason = describe_mismatch(
+        built_with, embedding_model="BAAI/bge-m3",
+        source_files=[tmp_path / "cleaned_recipes.csv", tmp_path / "cleaned_healthy_meals.csv"],
+    )
+    assert reason is not None and "cleaned_healthy_meals.csv" in reason
+
+
+def test_matching_source_set_is_not_stale(tmp_path):
+    (tmp_path / "cleaned_recipes.csv").write_text("a,b\n1,2\n")
+    files = [tmp_path / "cleaned_recipes.csv"]
+    meta = IndexMeta.build(
+        embedding_model="BAAI/bge-m3", embedding_dim=1024, doc_count=1090,
+        rag_class="RecipeNutritionRAG", source_files=files,
+    )
+    assert describe_mismatch(meta, embedding_model="BAAI/bge-m3", source_files=files) is None

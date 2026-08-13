@@ -215,7 +215,7 @@ At minimum, edit these:
 | `GROQ_API_KEY` | -- | Required when `LLM_PROVIDER=groq` |
 | `OPENAI_API_KEY` | -- | Required when `LLM_PROVIDER=openai` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/` | Ollama server URL |
-| `EMBEDDING_MODEL` | `BAAI/bge-m3` | HuggingFace embedding model (changing it forces a reindex) |
+| `EMBEDDING_MODEL` | `BAAI/bge-base-en-v1.5` | HuggingFace embedding model. Equal to bge-m3 on the served config and 21x faster per query; use bge-m3 only for non-English. Changing it forces a reindex |
 | `DB_PATH` | `users.db` | SQLite database path |
 | `DETECTOR_BACKEND` | `hybrid` | `hybrid`, `vlm`, or `yolo` |
 | `DETECTOR_VLM_MODEL` | `qwen2.5vl:7b` | Ollama vision model. Use `:3b` on a memory-tight host |

@@ -358,8 +358,27 @@ class RecipeNutritionRAG(BaseRAG):
         for doc in all_docs:
             doc.metadata["_collection"] = "recipes"
 
-        logger.info("Loaded %d recipe/meal documents", len(all_docs))
-        return all_docs
+        # The two CSVs overlap: 129 documents are byte-identical to another.
+        # Left in, they consume retrieval slots with text the LLM has already
+        # been given. Deduped on exact content only — the 214 shared *names*
+        # are mostly genuinely different recipes (seven distinct "Chicken
+        # Casserole"s), and collapsing those would lose real options.
+        seen: set[str] = set()
+        deduped = []
+        for doc in all_docs:
+            if doc.page_content in seen:
+                continue
+            seen.add(doc.page_content)
+            deduped.append(doc)
+
+        if len(deduped) != len(all_docs):
+            logger.info(
+                "Loaded %d recipe/meal documents (%d exact duplicates dropped)",
+                len(deduped), len(all_docs) - len(deduped),
+            )
+        else:
+            logger.info("Loaded %d recipe/meal documents", len(deduped))
+        return deduped
 
     def _ingest_single_file(self, file_path: str) -> list[Document]:
         path = Path(file_path)

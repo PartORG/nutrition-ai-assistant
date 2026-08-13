@@ -15,7 +15,19 @@ from pathlib import Path
 # defaults lived in config.py, base_rag.py and medical_rag.py; the factory
 # always overrode them, so the class defaults were traps for any code that
 # constructed a RAG directly (scripts, tests, the index CLI).
-DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
+# Measured on this repo's eval (35 queries, clean index, corrected labels),
+# nDCG@10 by retrieval config, and milliseconds to embed one query on CPU:
+#
+#                     dense   hybrid   hybrid+rerank   ms/query   params
+#   bge-m3            0.280    0.303       0.386          572      568M
+#   bge-base-en-v1.5  0.315    0.383       0.385           27      109M
+#
+# Identical on the config the app actually serves (hybrid+rerank), better on
+# the others, and 21x faster per query on a CPU-only deployment. bge-m3's
+# advantage is multilingual coverage, which this corpus and these prompts —
+# all English — never use. Set EMBEDDING_MODEL=BAAI/bge-m3 to go back;
+# changing this requires `nutriai-index rebuild`.
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
 
 @dataclass(frozen=True)

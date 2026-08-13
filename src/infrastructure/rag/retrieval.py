@@ -22,12 +22,15 @@ application, domain, or agent code changes are required to use them.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Sequence
 
 from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
 
 logger = logging.getLogger(__name__)
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +123,19 @@ def docs_from_vectorstore(vectorstore) -> list[Document]:
     return list(mapping.values())
 
 
+def bm25_tokenize(text: str) -> list[str]:
+    """Lowercase alphanumeric tokens.
+
+    BM25Retriever's default preprocessor is bare `text.split()`, which keeps
+    case and glues punctuation on: a recipe indexes as "Chicken", "Oil," and
+    "chopped.", so a lowercase query matches almost nothing. Sparse retrieval
+    was returning near-noise, and because RRF weights every input list equally
+    that noise was actively displacing good dense hits — hybrid scored *below*
+    dense-only on the eval before this.
+    """
+    return _TOKEN_RE.findall(text.lower())
+
+
 def build_bm25(documents: Sequence[Document], k: int):
     """Build an in-memory BM25 retriever from documents. Returns None on failure."""
     docs = list(documents)
@@ -128,7 +144,7 @@ def build_bm25(documents: Sequence[Document], k: int):
     try:
         from langchain_community.retrievers import BM25Retriever
 
-        retriever = BM25Retriever.from_documents(docs)
+        retriever = BM25Retriever.from_documents(docs, preprocess_func=bm25_tokenize)
         retriever.k = k
         logger.info("BM25 retriever built over %d documents (k=%d)", len(docs), k)
         return retriever

@@ -1,6 +1,6 @@
 {
   "_about": "Retrieval eval for the recipe corpus. Relevance is by DOCUMENT ID (a doc's recipe_name), not by keyword substring: the old proxy counted a chunk relevant if it contained a word like 'chicken', which structurally favoured BM25 and hit a ceiling because common words appear in a large fraction of 3,090 documents. Each query here is phrased to describe a dish WITHOUT using words from its title, so a retriever cannot win by lexical overlap alone.",
-  "_caveat": "Starter set built by the assistant, validated so every gold ID exists in the corpus. It is NOT a domain-reviewed gold standard: relevance judgments are one person's opinion of what a query should return, and other recipes in the corpus may be equally relevant but unlabelled, which depresses recall. Treat absolute numbers with suspicion; treat A/B differences between retrieval configs, read together with the bootstrap CI, as the signal.",
+  "_caveat": "Gold sets are built by an explicit, restatable rule, not by opinion: for each query, every corpus recipe whose NAME identifies the dish (e.g. contains 'quiche', 'slaw', 'smoothie'), minus names where the dish is only a component of a different main ('Fish Tacos with Mango Slaw') or a different dish sharing the word ('Corn Bread Dressing', 'Enchilada Meatballs'). This replaced a hand-picked 1-3 IDs per query, which was badly incomplete and systematically understated every retriever: 'blended cold fruit drink' listed one smoothie while the corpus holds 41, so a retriever returning a different perfectly good smoothie scored zero. Labels went 56 -> 249 and absolute scores rose accordingly, so numbers from before 2026-08-13 are NOT comparable to numbers after. Still not a domain-reviewed gold standard: the rule keys on the title, so a dish that matches the query but is titled obliquely is still unlabelled. Read A/B differences between configs together with the bootstrap CI, not absolute values.",
   "_fields": {
     "query": "the user query sent to the retriever",
     "rag": "'recipe' or 'medical'",
@@ -13,25 +13,32 @@
       "query": "north african stew with dried fruit and chickpeas",
       "rag": "recipe",
       "relevant_ids": [
+        "Instant Pot Chicken Tagine with Apricots and Chickpeas",
         "Moroccan Chicken Tagine",
-        "Instant Pot Chicken Tagine with Apricots and Chickpeas"
+        "Okra & Chickpea Tagine",
+        "Slow Cooker Chicken Tagine"
       ]
     },
     {
       "query": "cold spanish tomato soup served chilled",
       "rag": "recipe",
       "relevant_ids": [
-        "Green Gazpacho",
-        "Bloody Mary-Flavored Gazpacho Recipe"
+        "Bloody Mary-Flavored Gazpacho Recipe",
+        "Green Gazpacho"
       ]
     },
     {
       "query": "creamy italian rice cooked slowly in stock",
       "rag": "recipe",
       "relevant_ids": [
-        "Risotto Al Balsamico",
         "Cindy Lynn's Tomato-Chicken Risotto",
-        "Jambalaya Risotto"
+        "Corn-and-Oat Risotto",
+        "Jambalaya Risotto",
+        "Pesto Risotto",
+        "Risotto Al Balsamico",
+        "Risotto with Fresh Figs and Prosciutto",
+        "Spring Risotto Of Asparagus, Peas & Ramps",
+        "Winter Squash Risotto With Radicchio"
       ]
     },
     {
@@ -39,6 +46,7 @@
       "rag": "recipe",
       "relevant_ids": [
         "Avocado Shrimp Ceviche-Estillo Sarita",
+        "Ceviche Tostadas",
         "Mexican Mango and White Fish Ceviche"
       ]
     },
@@ -69,14 +77,27 @@
       "query": "savoury egg tart baked in pastry",
       "rag": "recipe",
       "relevant_ids": [
+        "Bacon Quiche Biscuit Cups",
+        "Bacon-Sausage Quiche Tarts",
+        "Beth'S Cheese And Bacon Quiche",
+        "Cast-Iron Spinach Quiche",
+        "Crab Quiche Bake",
+        "Divine Crab Quiche",
+        "Italian Zucchini Quiche",
+        "Pizza Quiche (Zucchini, Tomato, Mozzarella) Crustless!",
         "Spinach Bacon Quiche",
-        "Divine Crab Quiche"
+        "Spinach Quiche In A Rice Crust",
+        "Zucchini Quiche"
       ]
     },
     {
       "query": "thick creamy soup made with sweetcorn",
       "rag": "recipe",
       "relevant_ids": [
+        "Creamed Corn",
+        "Easy Chicken Corn Chowder",
+        "Excellent Mexican Chicken Corn Chowder",
+        "Just Like Granny's Cream Corn",
         "Parmesan Corn Chowder"
       ]
     },
@@ -84,8 +105,7 @@
       "query": "stewed summer vegetables from provence",
       "rag": "recipe",
       "relevant_ids": [
-        "Southern Italian Ratatouille",
-        "Turkey Burgers With Quick Ratatouille"
+        "Southern Italian Ratatouille"
       ]
     },
     {
@@ -93,7 +113,18 @@
       "rag": "recipe",
       "relevant_ids": [
         "Best Guacamole",
-        "Chunky Guacamole"
+        "Chunky Guacamole",
+        "Easy Never Forgotten Guacamole",
+        "Guacamole (Barefoot Contessa) Ina Garten",
+        "Guacamole Any Way You Want It",
+        "Guiltless Guacamole",
+        "Mean Green Guacamole Salsa",
+        "Quick and Easy Guacamole",
+        "Red Guacamole",
+        "Savory Mango Guacamole",
+        "The Chunkiest, Herbiest, Greenest Guacamole",
+        "Traditional Mexican Guacamole",
+        "World's Best Guacamole"
       ]
     },
     {
@@ -101,22 +132,37 @@
       "rag": "recipe",
       "relevant_ids": [
         "Beef Stroganoff:  Easy And Natural",
-        "Chili Stroganoff"
+        "Chili Stroganoff",
+        "Hamburger Stroganoff",
+        "Hands Off My Beef Stroganoff",
+        "Russian Beef Stroganoff Recipe",
+        "Simple & Tasty Beef Stroganoff",
+        "Vegan Soy Meatball Stroganoff"
       ]
     },
     {
       "query": "minced meat baked in a loaf tin",
       "rag": "recipe",
       "relevant_ids": [
+        "'Ol Man Jim'S Smoked Meat Loaf",
+        "Basic Meat Loaf(Microwave)",
         "Chicken Meatloaf",
-        "Chicken Meatloaf with Sun-Dried Tomatoes"
+        "Chicken Meatloaf with Sun-Dried Tomatoes",
+        "Instant Pot Meatloaf",
+        "Lorrie'S Meat Loaf",
+        "Meat Loaf",
+        "Meat Loaf Special",
+        "Quick And Easy Meat Loaf",
+        "Simple Apricot-Glazed Meatloaf",
+        "Veggie Meatloaf with Mushrooms and Sun-Dried Tomatoes"
       ]
     },
     {
       "query": "middle eastern salad with bulgur wheat and parsley",
       "rag": "recipe",
       "relevant_ids": [
-        "Tabbouleh(A Middle Eastern Salad)"
+        "Tabbouleh(A Middle Eastern Salad)",
+        "Tabouli Salad"
       ]
     },
     {
@@ -139,7 +185,17 @@
       "rag": "recipe",
       "relevant_ids": [
         "Carry-Out Campers' Coleslaw",
-        "Coleslaw In A Bag"
+        "Coleslaw In A Bag",
+        "Dressing For Potato Salad Or Slaw",
+        "Easy Apple Coleslaw",
+        "Grandma Houser'S Slaw",
+        "Hawaiian Cole Slaw",
+        "Keepin' Slaw(An Oldie)",
+        "Mango Cilantro Slaw",
+        "Piri Piri Chicken With Coleslaw",
+        "Pulled Pork Tostadas With Slaw And Chipotle Cream",
+        "Snap Pea And Cabbage Slaw",
+        "Tricolor Coleslaw"
       ]
     },
     {
@@ -147,35 +203,100 @@
       "rag": "recipe",
       "relevant_ids": [
         "Brown Sugar Brownies",
-        "Brownie Chocolate Chip Cookie Bars"
+        "Brownie Chocolate Chip Cookie Bars",
+        "Brownie Pizza",
+        "Brownies",
+        "Caramel Chocolate Brownies",
+        "Cherry Cheesecake Brownies",
+        "Chewy Brownie Cookies",
+        "Cinnamon Brownies",
+        "Easy Banana Brownies",
+        "French Chocolate Squares(Best Ever Brownies)",
+        "Fudge Brownies",
+        "Low-Fat Brownies",
+        "Low-Sugar Date Brownies",
+        "Never-Fail Brownies",
+        "Praline Brownies",
+        "Raspberry Brownies",
+        "Salted Peanut Brownie Bites",
+        "The World'S Best Brownies",
+        "White Chocolate Brownies",
+        "Zucchini brownie"
       ]
     },
     {
       "query": "baked dessert with a cream cheese filling",
       "rag": "recipe",
       "relevant_ids": [
-        "Almond Cheesecake"
+        "\"Hershey'S\"Triple Layer Cheesecake",
+        "Almond Cheesecake",
+        "Apricot Cheesecake",
+        "Black Forest Cheesecakes",
+        "Cheesecake-Stuffed Strawberries",
+        "Cherry Cheesecake Brownies",
+        "Chocolate Cheesecake(Serves 8 To 10)",
+        "Coconut-Lime Cheesecake with Mango Coulis",
+        "Creamy Lemon Cheesecake Recipe",
+        "Double Chocolate Raspberry Swirl Cheesecake Bars",
+        "Easy Kiss Frozen Mini Cheesecakes",
+        "Faux Strawberry “Cheesecake”",
+        "Gingerbread Cheesecake with Orange Sauce",
+        "Gluten Free Cheesecake",
+        "Lemon Meringue Cheesecake",
+        "Mini Cheesecakes",
+        "Nigella Lawson'S No-Bake Nutella Cheesecake",
+        "PHILADELPHIA 3-Step Mini Cheesecake Baskets",
+        "Persimmon Cheesecake",
+        "Philadelphia Cheesecake Parfaits",
+        "Quick Breakfast Cheesecake",
+        "Simple Oreo Cheesecake (Modified)",
+        "Strawberry Cheesecake",
+        "White Chocolate Raspberry Cheesecake"
       ]
     },
     {
       "query": "tortillas rolled with filling and baked in sauce",
       "rag": "recipe",
       "relevant_ids": [
+        "Black Bean & Chicken Enchilada Lasagna",
         "Cilantro-Lime Enchiladas",
-        "Black Bean & Chicken Enchilada Lasagna"
+        "Enchilada Stack",
+        "Enchiladas",
+        "Spinach and Potato Enchiladas #5FIX"
       ]
     },
     {
       "query": "soft breakfast batter cooked on a griddle",
       "rag": "recipe",
       "relevant_ids": [
-        "Baked Apple Pancake"
+        "Baked Apple Pancake",
+        "Big-Batch Pancake And Waffle Mix",
+        "Blueberry Cornmeal Pancakes Recipe",
+        "Crunchy Potato Pancakes Recipe",
+        "Double-Chocolate Devil'S Food Pancakes",
+        "German Apple Pancake",
+        "German Potato Pancakes",
+        "Grandparents Swedish Pancakes",
+        "Hungarian Placki (Potato Pancakes with Spicy Tomato-Beef Sauce)",
+        "Low-Carb Pancakes",
+        "Mom'S Pancakes From Scratch -- So Simple!!",
+        "Oven Pancake",
+        "Pancakes",
+        "Pikelets (Scottish Pancakes)",
+        "Potato Pancakes",
+        "Pudla (Chickpea Flour Pancakes)",
+        "Ricotta Pancakes With Cinnamon Apples",
+        "Strawberry-Banana Pancake Foldover",
+        "Todd's Famous Blueberry Pancakes",
+        "Vegan Oat And Walnut Pancakes",
+        "Veronica's Apple Pancakes"
       ]
     },
     {
       "query": "crisp batter cooked in a patterned iron",
       "rag": "recipe",
       "relevant_ids": [
+        "Big-Batch Pancake And Waffle Mix",
         "Diane'S Waffles"
       ]
     },
@@ -184,7 +305,17 @@
       "rag": "recipe",
       "relevant_ids": [
         "Almost No Fat Banana Bread",
-        "Banana Bread - Quick Bread for Machines"
+        "Banana Bread - Quick Bread for Machines",
+        "Beautiful Banana Bread",
+        "Blueberry Banana Bread",
+        "Brown Sugar Banana Bread",
+        "Cream Cheese Banana Bread",
+        "Gluten Free Banana Bread Recipe",
+        "Janet's Rich Banana Bread",
+        "Joy's Easy Banana Bread",
+        "Sarah's Banana Bread Muffins",
+        "Simple Banana Bread",
+        "The Best Banana Bread"
       ]
     },
     {
@@ -192,22 +323,66 @@
       "rag": "recipe",
       "relevant_ids": [
         "Amazing Lemon Scones",
-        "Fabulous Fig Scones"
+        "Fabulous Fig Scones",
+        "Gluten Free Blueberry Scones",
+        "Savory Cheese Dill Scones"
       ]
     },
     {
       "query": "blended cold fruit drink",
       "rag": "recipe",
       "relevant_ids": [
+        "Apricot, Cashew Smoothie",
         "Avocado Smoothie",
-        "Apricot, Cashew Smoothie"
+        "B and L's Strawberry Smoothie",
+        "Banana, Avocado, and Spinach Smoothie",
+        "Bananerberry Smoothie",
+        "Basic Fruit Smoothie",
+        "Berry Coconut Almond Smoothie",
+        "Blue Smoothie",
+        "Blueberry Smoothie",
+        "Crazy Fruit Smoothie",
+        "Creamy Mango Smoothie",
+        "Easy Mango Banana Smoothie",
+        "Fig Smoothie",
+        "Fruit and Yogurt Smoothie",
+        "Healthy Chocolate Smoothie",
+        "Heart Healthy Blueberry Smoothie",
+        "Kiwi Banana Apple Smoothie",
+        "Lela's Protein Mango Smoothie",
+        "Mango Cherry Smoothie",
+        "Mango Oatmeal Breakfast Smoothie",
+        "Mango Watermelon Smoothie",
+        "Mango-Peach Smoothie",
+        "Melon Smoothie",
+        "Papaya Passion Smoothie",
+        "Papaya Surprise Smoothie",
+        "Peach Banana Smoothie",
+        "Peach perfect smoothie",
+        "Peanut Butter Banana Smoothie",
+        "Peanut Butter Mango Smoothie",
+        "Pineapple Cleanser Smoothie",
+        "Pineapple and Banana Smoothie",
+        "Simple Cantaloupe Smoothie",
+        "Simple Summer Smoothie",
+        "Spinach and Banana Power Smoothie",
+        "Strawberry Banana Protein Smoothie",
+        "Strawberry Oatmeal Breakfast Smoothie",
+        "Strawberry Orange Banana Smoothie",
+        "Summer Sweet Smoothies",
+        "Supreme Green Smoothie",
+        "Tropical Mango-Pineapple-Berry Smoothie",
+        "kale smoothie for flat belly"
       ]
     },
     {
       "query": "vegetables quickly cooked in a hot wok",
       "rag": "recipe",
       "relevant_ids": [
+        "Chicken And Shrimp Stir-Fry",
         "Chicken And Vegetable Stir Fry Recipe",
+        "Chicken Stir-Fry Salad",
+        "Sesame Beef Stir-Fry (Ww Core)",
         "Vegetable Orange Stir Fry"
       ]
     },
@@ -215,7 +390,9 @@
       "query": "slow cooked joint of beef",
       "rag": "recipe",
       "relevant_ids": [
-        "Bubba'S Pot Roast"
+        "Balsamic-Braised Pot Roast with Tomatoes, Lemons, Raisins, and Black OlivePine Nut Relish",
+        "Bubba'S Pot Roast",
+        "Slow Cooker Apple Cider Pot Roast"
       ]
     },
     {
@@ -236,36 +413,52 @@
       "query": "soft parcels of dough simmered on a stew",
       "rag": "recipe",
       "relevant_ids": [
+        "30 Minute Chicken And Dumplings",
         "Chicken And Dumplings",
-        "30 Minute Chicken And Dumplings"
+        "Roasted Eggplant Soup with Goat Cheese Dumplings"
       ]
     },
     {
       "query": "crumbly yellow bread baked from maize",
       "rag": "recipe",
       "relevant_ids": [
-        "Cornbread"
+        "Chicken, Vegetable And Cornbread Cobbler",
+        "Corn Bread Cake",
+        "Corn Bread With Basil, Red Peppers And Monterey",
+        "Cornbread",
+        "Country Style Corn Bread",
+        "Good And Moist Cornbread",
+        "Jalapeno Cornbread",
+        "Mexican Corn Bread"
       ]
     },
     {
       "query": "north african semolina grains as a side",
       "rag": "recipe",
       "relevant_ids": [
-        "Couscous With Asparagus and Lime"
+        "Acorn Squash Stuffed With Carrot, Apple And Onion Couscous Recipe",
+        "Couscous With Asparagus and Lime",
+        "Fruity Couscous Salad",
+        "Red Pepper Couscous Ring with Vegetables"
       ]
     },
     {
       "query": "oat bars for a portable snack",
       "rag": "recipe",
       "relevant_ids": [
-        "Granola Bars"
+        "Granola Bars",
+        "Oat-Free and Gluten-Free Granola Bars (Clean Eating)"
       ]
     },
     {
       "query": "creamy white pasta sauce with parmesan",
       "rag": "recipe",
       "relevant_ids": [
-        "Bt Og Alfredo Sauce"
+        "Bt Og Alfredo Sauce",
+        "Cheesy, Creamy Alfredo Chicken Casserole - Forevermama",
+        "Chicken Parmesan Alfredo",
+        "Easy Chicken Alfredo",
+        "Fettucini Alfredo"
       ]
     },
     {
